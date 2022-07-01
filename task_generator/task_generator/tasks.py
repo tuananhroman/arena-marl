@@ -42,11 +42,12 @@ class ABSMARLTask(ABC):
         """
 
     def _update_map(self, map_: OccupancyGrid):
-        with self._map_lock:
-            self.obstacles_manager.update_map(map_)
-            for manager in self.robot_manager:
-                for rm in self.robot_manager[manager]:
-                    rm.update_map(map_)
+        if self.obstacles_manager is not None:
+            with self._map_lock:
+                self.obstacles_manager.update_map(map_)
+                for manager in self.robot_manager:
+                    for rm in self.robot_manager[manager]:
+                        rm.update_map(map_)
 
     def set_obstacle_manager(self, manager: ObstaclesManager):
         assert type(manager) is ObstaclesManager
@@ -388,10 +389,15 @@ def get_task_manager(
     return task
 
 
-def init_obstacle_manager(n_envs):
+def init_obstacle_manager(n_envs, mode: str = "train"):
     service_client_get_map = rospy.ServiceProxy("/static_map", GetMap)
     map_response = service_client_get_map()
-    return {
-        f"sim_{i}": ObstaclesManager(f"sim_{i}", map_response.map)
-        for i in range(1, n_envs + 1)
-    }
+    if mode == "train":
+        return {
+            f"sim_{i}": ObstaclesManager(f"sim_{i}", map_response.map)
+            for i in range(1, n_envs + 1)
+        }
+    elif mode == "eval":
+        return ObstaclesManager("eval_sim", map_response.map)
+    else:
+        raise ValueError("mode must be either 'train' or 'eval'")

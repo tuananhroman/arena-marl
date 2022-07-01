@@ -298,7 +298,7 @@ class RobotManager:
         return math.sqrt(math.pow(x, 2) + math.pow(y, 2))
 
 
-def init_robot_managers(n_envs, robot_type, agent_dict):
+def init_robot_managers(n_envs, robot_type, agent_dict, mode: str = "train"):
     """For each namespace (parallel env) generate a list of RobotManager objects.
     One for object in list for every agent of the current robot type.
 
@@ -314,15 +314,26 @@ def init_robot_managers(n_envs, robot_type, agent_dict):
     """
     service_client_get_map = rospy.ServiceProxy("/static_map", GetMap)
     map_response = service_client_get_map()
-    return {
-        f"sim_{i}": [
+    if mode == "train":
+        return {
+            f"sim_{i}": [
+                RobotManager(
+                    ns=f"sim_{i}",
+                    map_=map_response.map,
+                    robot_type=robot_type,
+                    robot_id=robots._robot_sim_ns,
+                )
+                for robots in agent_dict[f"sim_{i}"]
+            ]
+            for i in range(1, n_envs + 1)
+        }
+    elif mode == "eval":
+        return [
             RobotManager(
-                ns=f"sim_{i}",
+                ns="eval_sim",
                 map_=map_response.map,
                 robot_type=robot_type,
                 robot_id=robots._robot_sim_ns,
             )
-            for robots in agent_dict[f"sim_{i}"]
+            for robots in agent_dict["sim_1"]
         ]
-        for i in range(1, n_envs + 1)
-    }

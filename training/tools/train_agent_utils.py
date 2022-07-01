@@ -217,6 +217,7 @@ def create_training_setup(config: dict) -> dict:
             "model": model,
             "env": env,
             "n_envs": config["n_envs"],
+            "agent_dict": agent_dict,
             "robot_train_params": robot_train_params,
             "hyper_params": hyper_params,
             "paths": paths,

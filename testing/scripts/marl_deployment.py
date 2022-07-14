@@ -14,77 +14,28 @@ from stable_baselines3.common.vec_env import DummyVecEnv
 from testing.scripts.evaluation import evaluate_policy
 from training.tools import train_agent_utils
 from training.tools.argsparser import parse_training_args
-from training.tools.train_agent_utils import load_config
+from training.tools.train_agent_utils import load_config, create_training_setup
 
 
 def main(args):
+    rospy.init_node("marl_deployment")
+
     # load configuration
     config = load_config(args.config)
 
-    # set debug_mode
+    # set debug_mode - this mode hinders the creation of several training directories and models.
     rospy.set_param("debug_mode", config["debug_mode"])
 
     # load agents
-    assert len(config["robots"]) == 1, "Only one robot type is supported"
+    assert len(config["robots"]) == 1, "Only one robot type is currently supported"
 
-    robots, existing_robots = {}, 0
-
-    # loop over all robots in config
-    for robot_name, robot_train_params in config["robots"].items():
-        # Get the Base Agent instance(s)
-        robots[robot_name] = {
-            "agents": instantiate_train_drl_agents(
-                num_robots=robot_train_params["num_robots"],
-                robot_model=robot_name,
-                hyperparameter_path=get_hyperparameter_file(
-                    robot_train_params["hyperparameter_file"]
-                ),
-            )
-        }
-        existing_robots += robot_train_params["num_robots"]
-
-        # Define paths. If the agent is a SARL agent, MARL_DIR is None.
-        MARL_DIR = ""
-        paths = train_agent_utils.get_paths(
-            MARL_DIR,
-            robot_name,
-            robot_train_params["resume"].split("/")[-1],
-            robot_train_params,
-            config["training_curriculum"]["training_curriculum_file"],
-            config["eval_log"],
-            config["tb"],
-        )
-
-        # Create env and store in dict
-        env = vec_env_create(
-            env_fn,
-            instantiate_train_drl_agents,
-            num_robots=robot_train_params["num_robots"],
-            num_cpus=cpu_count() - 1,
-            num_vec_envs=config["n_envs"],
-            task_mode=config["task_mode"],
-            PATHS=paths,
-            agent_list_kwargs={
-                "existing_robots": existing_robots,
-                "robot_model": robot_name,
-            },
-            max_num_moves_per_eps=config["max_num_moves_per_eps"],
-        )
-        robots[robot_name] = {"env": env}
-
-        # Load PPO model and store in dict
-        model = PPO.load(
-            os.path.join(robot_train_params["resume"], "best_model.zip"), env
-        )
-        robots[robot_name]["model"] = model
+    # ?? implement create_eval_setup? To make it more custom to deployment config yaml.
+    robots = create_training_setup(config)
 
     # Evaluate the policy for one robot type!
     # Integration of multiple robot types is not yet implemented
     mean_rewards, std_rewards = evaluate_policy(
         robots=robots,
-        # model=robots[robot_name]["model"],
-        # num_robots=robot_train_params["num_robots"],
-        # env=robots[robot_name]["env"],
         n_eval_episodes=config["periodic_eval"]["n_eval_episodes"],
         return_episode_rewards=False,
     )

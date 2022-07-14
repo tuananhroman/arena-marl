@@ -6,10 +6,6 @@ from stable_baselines3.common import base_class
 
 
 def evaluate_policy(
-    # model: "base_class.BaseAlgorithm",
-    # # env: Union[sb3vw.SB3VecEnvWrapper, VecEnv],
-    # num_robots: int,
-    # env: sb3vw.SB3VecEnvWrapper,
     robots: Dict[str, Dict[str, Any]],
     n_eval_episodes: int = 10,
     deterministic: bool = True,
@@ -30,25 +26,6 @@ def evaluate_policy(
         (e.g. reward scaling, early episode reset), these will affect the evaluation
         results as well. You can avoid this by wrapping environment with ``Monitor``
         wrapper before anything else.
-
-    :param model: The RL agent you want to evaluate.
-    :param env: The gym environment. In the case of a ``VecEnv``
-        this must contain only one environment.
-    :param n_eval_episodes: Number of episode to evaluate the agent
-    :param deterministic: Whether to use deterministic or stochastic actions
-    :param render: Whether to render the environment or not
-    :param callback: callback function to do additional checks,
-        called after each step. Gets locals() and globals() passed as parameters.
-    :param reward_threshold: Minimum expected reward per episode,
-        this will raise an error if the performance is not met
-    :param return_episode_rewards: If True, a list of rewards and episode lengths
-        per episode will be returned instead of the mean.
-    :param warn: If True (default), warns user about lack of a Monitor wrapper in the
-        evaluation environment.
-    :return: Mean reward per episode, std of reward per episode.
-        Returns ([float], [int]) when ``return_episode_rewards`` is True, first
-        list containing per-episode rewards and second containing per-episode lengths
-        (in number of steps).
     """
     is_monitor_wrapped = False
     # Avoid circular import
@@ -66,37 +43,43 @@ def evaluate_policy(
             not_reseted = False
 
     # {'robot': [agents]} e.g. {'jackal': [agent1, agent2], 'burger': [agent1]}
-    agents = {robot: robots[robot]["agent"] for robot in robots}
+    agents = {robot: robots[robot]["agent_dict"] for robot in robots}
+    # {'robot': [robot_ns]} e.g. {'jackal': [robot1, robot2], 'burger': [robot1]}
+    agent_names = {
+        robot: [a_name._robot_sim_ns for a_name in agents[robot]["sim_1"]]
+        for robot in robots
+    }
 
     # {
-    #   'robot1':
-    #       'agent1': [reward1, reward2, ...]
-    #       'agent2': [reward1, reward2, ...]
-    #   'robot2':
-    #       'agent1': [reward1, reward2, ...]
-    #       'agent2': [reward1, reward2, ...]
+    #   'jackal':
+    #       'robot1': [reward1, reward2, ...]
+    #       'robot2': [reward1, reward2, ...]
+    #   'burger':
+    #       'robot1': [reward1, reward2, ...]
+    #       'robot2': [reward1, reward2, ...]
     # }
-    for robot in robots:
-        episode_rewards = {robot: {agent: []} for agent in agents[robot]}
+    episode_rewards = {
+        robot: {agent: [] for agent in agent_names[robot]} for robot in robots
+    }
     episode_lengths = []
 
-    # dones -> {'robot': {'agent': False}}
-    # e.g. {'jackal': {agent1: False, agent2: False}, 'burger': {'agent1': False}}
-    default_dones = {robot: {a: None for a in agents[robot]} for robot in robots}
-    default_states = {}
-    default_actions = {}
-    # states, actions, episode rewards -> {'robot': {'agent': None}}
-    # e.g. {'jackal': {agent1: None, agent2: None}, 'burger': {'agent1': None}}
+    # dones -> {'robot': {'robot_ns': False}}
+    # e.g. {'jackal': {robot1: False, robot2: False}, 'burger': {'robot1': False}}
+    default_dones = {robot: {a: None for a in agent_names[robot]} for robot in robots}
+    default_states = {robot: None for robot in robots}
+    default_actions = {robot: None for robot in robots}
+    # states, actions, episode rewards -> {'robot': {'robot_ns': None}}
+    # e.g. {'jackal': {robot1: None, robot2: None}, 'burger': {'robot1': None}}
     default_episode_reward = {
-        robot: {a: None for a in agents[robot]} for robot in robots
+        robot: {a: None for a in agent_names[robot]} for robot in robots
     }
-    while len(episode_rewards) < n_eval_episodes:
+    while len(episode_lengths) < n_eval_episodes:
         # Number of loops here might differ from true episodes
         # played, if underlying wrappers modify episode lengths.
         # Avoid double reset, as VecEnv are reset automatically.
         if not_reseted:
             for robot in robots:
-                # ('robot': {'agent1': obs, 'agent2': obs, ...})
+                # ('robot': array[[obs1], [obs2], ...])
                 obs[robot] = robots[robot]["env"].reset()
                 not_reseted = False
 
@@ -109,17 +92,26 @@ def evaluate_policy(
             # Go over all robots
             for robot in robots:
                 # Get predicted actions and new states from each agent
-                for agent, state in states[robot].items():
-                    actions[agent], states[agent] = robots[robot]["model"].predict(
-                        obs[robot][agent], state, deterministic=deterministic
-                    )
+                actions[robot], states[robot] = robots[robot]["model"].predict(
+                    obs[robot], states[robot], deterministic=deterministic
+                )
 
                 # Publish actions in the environment
-                robots[robot]["env"].apply_actions(actions)
+                env = robots[robot]["env"]
+                env.apply_action(actions[robot])
+
+                # shouldn't we here make the takeSimStep() call?
+
+                # Take one step in the simulation (applies to all robots and all agents, respectively!)
+                # todo: outsource call_service_takeSimStep from env, since it is not env-specific
+                # robots[robot]["env"].call_service_takeSimStep()
+
+                # and then continue with a new for robots in robots loop to collect the obs and rewards?
+                # for robot in robots:
                 # And get new obs, rewards, dones, and infos
                 obs[robot], rewards, dones[robot], _ = robots[robot]["env"].get_states()
                 # Add up rewards for this episode
-                for agent, reward in zip(agents[robot], rewards.values()):
+                for agent, reward in zip(agent_names[robot], rewards.values()):
                     episode_reward[robot][agent] += reward
 
                 if callback is not None:
@@ -129,6 +121,7 @@ def evaluate_policy(
                     robots[robot]["env"].render()
 
             # Take one step in the simulation (applies to all robots and all agents, respectively!)
+            # todo: outsource call_service_takeSimStep from env, since it is not env-specific
             robots[robot]["env"].call_service_takeSimStep()
 
             episode_length += 1
@@ -153,17 +146,43 @@ def evaluate_policy(
 
         episode_lengths.append(episode_length)
 
-    # CURRENTLY HERE IN DEVELOPMENT
-    mean_rewards = {agent: np.mean(episode_rewards[agent]) for agent in agents}
-    std_rewards = {agent: np.std(episode_rewards[agent]) for agent in agents}
+    mean_rewards = {
+        robot: {
+            agent: np.mean(episode_rewards[robot][agent])
+            for agent in agent_names[robot]
+        }
+        for robot in robots
+    }
+
+    std_rewards = {
+        robot: {
+            agent: np.std(episode_rewards[robot][agent]) for agent in agent_names[robot]
+        }
+        for robot in robots
+    }
+
     if reward_threshold is not None:
-        assert min(mean_rewards.values()) > reward_threshold, (
-            "Atleast one mean reward below threshold: "
-            f"{min(mean_rewards.values()):.2f} < {reward_threshold:.2f}"
-        )
+        for robot in robots:
+            for agent in agent_names[robot]:
+                if mean_rewards[robot][agent] < reward_threshold:
+                    raise ValueError(
+                        "Mean reward for agent {} of robot {} is below threshold! {} < {}".format(
+                            agent, robot, mean_rewards[robot][agent], reward_threshold
+                        )
+                    )
+
     if return_episode_rewards:
         return episode_rewards, episode_lengths
     return mean_rewards, std_rewards
+
+    # if reward_threshold is not None:
+    #     assert min(mean_rewards.values()) > reward_threshold, (
+    #         "Atleast one mean reward below threshold: "
+    #         f"{min(mean_rewards.values()):.2f} < {reward_threshold:.2f}"
+    #     )
+    # if return_episode_rewards:
+    #     return episode_rewards, episode_lengths
+    # return mean_rewards, std_rewards
 
 
 def check_dones(dones):

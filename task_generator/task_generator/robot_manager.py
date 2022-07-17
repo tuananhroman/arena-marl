@@ -328,12 +328,14 @@ def init_robot_managers(n_envs, robot_type, agent_dict, mode: str = "train"):
             for i in range(1, n_envs + 1)
         }
     elif mode == "eval":
-        return [
-            RobotManager(
-                ns="eval_sim",
-                map_=map_response.map,
-                robot_type=robot_type,
-                robot_id=robots._robot_sim_ns,
-            )
-            for robots in agent_dict["sim_1"]
-        ]
+        return {
+            "eval_sim": [
+                RobotManager(
+                    ns="eval_sim",
+                    map_=map_response.map,
+                    robot_type=robot_type,
+                    robot_id=robots._robot_sim_ns,
+                )
+                for robots in agent_dict["eval_sim"]
+            ]
+        }

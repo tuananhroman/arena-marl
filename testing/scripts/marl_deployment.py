@@ -14,7 +14,7 @@ from stable_baselines3.common.vec_env import DummyVecEnv
 from testing.scripts.evaluation import evaluate_policy
 from training.tools import train_agent_utils
 from training.tools.argsparser import parse_training_args
-from training.tools.train_agent_utils import load_config, create_training_setup
+from training.tools.train_agent_utils import load_config, create_deployment_setup
 
 
 def main(args):
@@ -26,11 +26,10 @@ def main(args):
     # set debug_mode - this mode hinders the creation of several training directories and models.
     rospy.set_param("debug_mode", config["debug_mode"])
 
-    # load agents
-    assert len(config["robots"]) == 1, "Only one robot type is currently supported"
+    # load robots
+    # assert len(config["robots"]) == 1, "Only one robot type is currently supported"
 
-    # ?? implement create_eval_setup? To make it more custom to deployment config yaml.
-    robots = create_training_setup(config)
+    robots = create_deployment_setup(config)
 
     # Evaluate the policy for one robot type!
     # Integration of multiple robot types is not yet implemented

@@ -247,11 +247,11 @@ class FlatlandPettingZooEnv(ParallelEnv):
 
         return merged_obs, rewards, dones, infos
 
-    def apply_action(self, actions: np.ndarray) -> None:
+    def apply_action(self, actions: dict) -> None:
         """_summary_
 
         Args:
-            action (np.ndarray): _description_
+            action (dict): _description_
 
         Returns:
             _type_: _description_

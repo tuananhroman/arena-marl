@@ -67,7 +67,6 @@ def main(args):
                 train_env=robots[robot_names[0]]["env"],
                 num_robots=robots[robot_names[0]]["robot_train_params"]["num_robots"],
                 num_envs=config["n_envs"],
-                agent_dict=robots[robot_names[0]]["agent_dict"],
                 config=config,
                 PATHS=robots[robot_names[0]]["paths"],
             ),
@@ -89,7 +88,6 @@ def get_evalcallback(
     train_env,
     num_robots,
     num_envs,
-    agent_dict: dict,
     config: dict,
     PATHS: dict,
 ) -> MarlEvalCallback:
@@ -116,22 +114,26 @@ def get_evalcallback(
     obstacle_manager = init_obstacle_manager(None, mode="eval")
     task_manager.set_obstacle_manager(obstacle_manager)
 
-    robot_managers = init_robot_managers(
-        n_envs=1, robot_type=robot_name, agent_dict=agent_dict, mode="eval"
-    )
-    task_manager.add_robot_manager(robot_type=robot_name, managers=robot_managers)
+    eval_agent_dict = {
+        "eval_sim": instantiate_train_drl_agents(
+            num_robots=num_robots,
+            existing_robots=0,
+            robot_model=robot_name,
+            hyperparameter_path=PATHS["hyperparams"],
+            ns="eval_sim",
+        )
+    }
 
-    eval_agent_list = instantiate_train_drl_agents(
-        num_robots=num_robots,
-        existing_robots=0,
-        robot_model=robot_name,
-        hyperparameter_path=PATHS["hyperparams"],
-        ns="eval_sim",
+    robot_managers = init_robot_managers(
+        n_envs=1, robot_type=robot_name, agent_dict=eval_agent_dict, mode="eval"
+    )
+    task_manager.add_robot_manager(
+        robot_type=robot_name, managers=robot_managers["eval_sim"]
     )
 
     # Setup evaluation environment
     eval_env = env_fn(
-        agent_list=eval_agent_list,
+        agent_list=eval_agent_dict["eval_sim"],
         ns="eval_sim",
         task_manager_reset=task_manager.reset,
         max_num_moves_per_eps=config["periodic_eval"]["max_num_moves_per_eps"],

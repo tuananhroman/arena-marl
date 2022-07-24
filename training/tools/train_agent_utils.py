@@ -322,6 +322,8 @@ def create_deployment_setup(config: dict) -> dict:
 
         ### load model
         sys.modules["rl_agent"] = sys.modules["rosnav"]
+        # custom policy relies on ros parameter for model to get the correct model parameters.
+        rospy.set_param("model", robot_name)
         # load flag
         assert os.path.isfile(
             os.path.join(robot_train_params["resume"], "best_model.zip")

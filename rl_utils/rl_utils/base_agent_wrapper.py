@@ -15,7 +15,7 @@ from geometry_msgs.msg import Twist
 from .utils.observation_collector import ObservationCollector
 from .utils.reward import RewardCalculator
 
-robot_model = rospy.get_param("model")
+# robot_model = rospy.get_param("model")
 ROOT_ROBOT_PATH = os.path.join(
     rospkg.RosPack().get_path("arena-simulation-setup"), "robot"
 )
@@ -116,7 +116,7 @@ class BaseDRLAgent(ABC):
             hyperparams = json.load(file)
 
         self._agent_params = hyperparams
-        self.robot_config_name = robot_model
+        self.robot_config_name = self.robot_model
         rospy.set_param(
             "actions_in_obs",
             self._agent_params.get("actions_in_observationspace", False),

@@ -1,10 +1,9 @@
-from re import A
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import copy
-import supersuit.vector.sb3_vector_wrapper as sb3vw
-from stable_baselines3.common import base_class
+
+from rl_utils.rl_utils.utils.utils import call_service_takeSimStep
 
 
 def evaluate_policy(
@@ -29,16 +28,18 @@ def evaluate_policy(
         results as well. You can avoid this by wrapping environment with ``Monitor``
         wrapper before anything else.
     """
-    is_monitor_wrapped = False
+    # is_monitor_wrapped = False
     # Avoid circular import
-    from stable_baselines3.common.env_util import is_wrapped
-    from stable_baselines3.common.monitor import Monitor
+    # from stable_baselines3.common.env_util import is_wrapped
+    # from stable_baselines3.common.monitor import Monitor
 
     obs = {robot: {} for robot in robots}
 
     not_reseted = True
     # Avoid double reset, as VecEnv are reset automatically.
     if not_reseted:
+        # perform one step in the simulation to update the scene
+        call_service_takeSimStep(ns="eval_sim")
         for robot in robots:
             # ('robot': {'agent1': obs, 'agent2': obs, ...})
             obs[robot] = robots[robot]["env"].reset()
@@ -76,8 +77,11 @@ def evaluate_policy(
     while len(episode_lengths) < n_eval_episodes:
         # Number of loops here might differ from true episodes
         # played, if underlying wrappers modify episode lengths.
+
         # Avoid double reset, as VecEnv are reset automatically.
         if not_reseted:
+            # perform one step in the simulation to update the scene
+            call_service_takeSimStep(ns="eval_sim")
             for robot in robots:
                 # ('robot': array[[obs1], [obs2], ...])
                 obs[robot] = robots[robot]["env"].reset()
@@ -105,9 +109,8 @@ def evaluate_policy(
                 env.apply_action(actions[robot])
 
             ### Make a step in the simulation
-            # This applies to robots with their respective agents
-            # todo: outsource call_service_takeSimStep from env, since it is not env-specific
-            robots[robot]["env"].call_service_takeSimStep()
+            # This moves all agents in the simulation and transfers them into the next state
+            call_service_takeSimStep(ns="eval_sim")
 
             ### Get new obs, rewards, dones, and infos for all robots
             for robot in robots:
@@ -168,15 +171,6 @@ def evaluate_policy(
     if return_episode_rewards:
         return episode_rewards, episode_lengths
     return mean_rewards, std_rewards
-
-    # if reward_threshold is not None:
-    #     assert min(mean_rewards.values()) > reward_threshold, (
-    #         "Atleast one mean reward below threshold: "
-    #         f"{min(mean_rewards.values()):.2f} < {reward_threshold:.2f}"
-    #     )
-    # if return_episode_rewards:
-    #     return episode_rewards, episode_lengths
-    # return mean_rewards, std_rewards
 
 
 def check_dones(dones):

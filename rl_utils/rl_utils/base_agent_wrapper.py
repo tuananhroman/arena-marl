@@ -122,7 +122,8 @@ class BaseDRLAgent(ABC):
             self._agent_params.get("actions_in_observationspace", False),
         )
 
-        import rosnav.model.custom_policy
+        # todo: What are the imports for?
+        # import rosnav.model.custom_policy
         import rosnav.model.custom_sb3_policy
 
     def read_setting_files(

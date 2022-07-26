@@ -1,8 +1,8 @@
 # in debug_mode no agent directories will be created and no models will be saved
 debug_mode: true
 
-# Hardware specifc configurations
-# number of parallel environments
+### Hardware specifc configurations
+# number of parallel environments always 1 for evaluation/ deployment
 n_envs: 1
 # gpu yes or no
 no_gpu: false
@@ -23,21 +23,21 @@ periodic_eval:
   # evaluation frequency, evaluation after every n_envs * 20000 timesteps
   eval_freq: 20000
 
-### training_curriculum
+### evaluation_curriculum
 # threshold metric to be considered during evaluation
 # can be either "succ" (success rate) or "rew" (reward)
-training_curriculum:
+evaluation_curriculum:
   # file for the robot's learning curriculum
-  training_curriculum_file: "default.yaml"
+  evaluation_curriculum_file: "default.yaml"
   threshold_type: "succ"
   upper_threshold: 0.8
   lower_threshold: 0.6
 
 ### stop training on threshold
 # stops training when last stage reached and threshold satisfied
-stop_training:
-  threshold_type: "succ"
-  threshold: 0.9
+# stop_training:
+#   threshold_type: "succ"
+#   threshold: 0.9
 
 
 # save evaluation stats during training in log file
@@ -53,17 +53,17 @@ robots:
     hyperparameter_file: "default.json"
     # name of architecture defined in the Policy factory
     architecture_name: "AGENT_24"
-    # path to latest checkpoint; if provided the training will be resumed from that checkpoint
+    # path to trained model that will be loaded for evaluation
     resume: "/home/ignc/MARL_ws/src/planners/rosnav/agents/jackal"
-  burger:
-    # number of robots of this type
-    num_robots: 2
-    # name of hyperparameter file located in the configs/hyperparameters directory
-    hyperparameter_file: "default.json"
-    # name of architecture defined in the Policy factory
-    architecture_name: "AGENT_24"
-    # path to latest checkpoint; if provided the training will be resumed from that checkpoint
-    resume: "/home/ignc/MARL_ws/src/planners/rosnav/agents/burger"
+  # burger:
+  #   # number of robots of this type
+  #   num_robots: 2
+  #   # name of hyperparameter file located in the configs/hyperparameters directory
+  #   hyperparameter_file: "default.json"
+  #   # name of architecture defined in the Policy factory
+  #   architecture_name: "AGENT_24"
+  #   # path to latest checkpoint; if provided the training will be resumed from that checkpoint
+  #   resume: "/home/ignc/MARL_ws/src/planners/rosnav/agents/burger"
   # rto:
   #   # number of robots of this type
   #   num_robots: 2

@@ -156,16 +156,18 @@ def create_training_setup(config: dict) -> dict:
             config["tb"],
         )
 
-        # initialize hyperparameters (save to/ load from json)
+        ### initialize hyperparameters (save to/ load from json)
         hyper_params = train_agent_utils.initialize_hyperparameters(
             PATHS=paths,
             config=robot_train_params,
             n_envs=config["n_envs"],
         )
 
-        # create agent wrapper dict for specific robot
+        ### create agent wrapper dict for specific robot
+        # custom policy relies on ros parameter for model to get the correct model parameters.
+        rospy.set_param("model", robot_name)
         # each entry contains list of agents for specfic namespace
-        # e.g. agent_list["sim_1"] -> [TrainingDRLAgent]
+        # e.g. agent_dict["sim_1"] -> [TrainingDRLAgent]
         agent_dict = {
             f"sim_{i}": instantiate_train_drl_agents(
                 num_robots=robot_train_params["num_robots"],
@@ -189,22 +191,14 @@ def create_training_setup(config: dict) -> dict:
                 robot_type=robot_name, managers=robot_manager_dict[f"sim_{i}"]
             )
 
-        if config["n_envs"] > 1:
-            env = vec_env_create(
-                env_fn,
-                agent_dict,
-                task_managers=task_managers,
-                num_cpus=cpu_count() - 1,
-                num_vec_envs=config["n_envs"],
-                max_num_moves_per_eps=config["max_num_moves_per_eps"],
-            )
-        else:
-            env = FlatlandPettingZooEnv(
-                agent_list=agent_dict["sim_1"],
-                ns="sim_1",
-                task_manager_reset=task_managers["sim_1"].reset,
-                max_num_moves_per_eps=config["periodic_eval"]["max_num_moves_per_eps"],
-            )
+        env = vec_env_create(
+            env_fn,
+            agent_dict,
+            task_managers=task_managers,
+            num_cpus=cpu_count() - 1,
+            num_vec_envs=config["n_envs"],
+            max_num_moves_per_eps=config["max_num_moves_per_eps"],
+        )
 
         existing_robots += robot_train_params["num_robots"]
 
@@ -226,37 +220,130 @@ def create_training_setup(config: dict) -> dict:
     return robots
 
 
-# def create_eval_setup(config: dict) -> dict:
-#     """Create evaluation setup from config file
+def create_deployment_setup(config: dict) -> dict:
+    """Create deployment setup from config file
 
-#     Args:
-#         config (dict): Config file containing training setup
+    Args:
+        config (dict): Config file containing deployment setup
 
-#     Returns:
-#         dict[dict[string, Any]]: Returns dict for all robot types (names) containing \
-#             all necessary parameters, paths, and instances of the training setup \
+    Returns:
+        dict[dict[string, Any]]: Returns dict for all robot types (names) containing \
+            all necessary parameters, paths, and instances of the deployment setup \
+                
+            robots[robot_name] = {
+                "model": model,
+                "env": env,
+                "n_envs": config["n_envs"],
+                "agent_dict": agent_dict,
+                "robot_train_params": robot_train_params,
+                "hyper_params": hyper_params,
+                "paths": paths,
+            }
+    """
 
-#             robots[robot_name] = {
-#                 "model": model,
-#                 "env": env,
-#                 "n_envs": config["n_envs"],
-#                 "robot_train_params": robot_train_params,
-#                 "hyper_params": hyper_params,
-#                 "paths": paths,
-#             }
-#     """
-#     robots, existing_robots = {}, 0
-#     MARL_NAME, START_TIME = get_MARL_agent_name_and_start_time()
+    ### existing_robots is used to generate new namespaces for each agent of each robot
+    # e.g. 'jackal' -> 'robot1', 'robot2'
+    #      'burger' -> 'robot3', 'robot4'
+    robots, existing_robots = {}, 0
+    MARL_NAME, START_TIME = "", ""
 
-#     task_managers = {
-#         f"eval_sim_{i}": get_task_manager(
-#             ns=f"sim_{i}",
-#             mode=config["task_mode"],
-#             curriculum_path=config["training_curriculum"]["training_curriculum_file"],
-#         )
-#         for i in range(1, config["n_envs"] + 1)
-#     }
-#     obstacle_manager_dict = init_obstacle_manager(n_envs=config["n_envs"])
+    ### create task manager
+    task_manager = get_task_manager(
+        ns="eval_sim",
+        mode=config["task_mode"],
+        curriculum_path=config["evaluation_curriculum"]["evaluation_curriculum_file"],
+    )
+
+    ### create and set obstacle manager
+    obstacle_manager = init_obstacle_manager(n_envs=config["n_envs"], mode="eval")
+    task_manager.set_obstacle_manager(obstacle_manager)
+
+    ### create seperate model instances for each robot
+    for robot_name, robot_train_params in config["robots"].items():
+        ### generate agent name and model specific paths
+        agent_name = (
+            robot_train_params["resume"].split("/")[-1]
+            if robot_train_params["resume"] is not None
+            else f"{robot_name}_{START_TIME}"
+        )
+
+        paths = train_agent_utils.get_paths(
+            MARL_NAME,
+            robot_name,
+            agent_name,
+            robot_train_params,
+            config["evaluation_curriculum"]["evaluation_curriculum_file"],
+            config["eval_log"],
+            config["tb"],
+        )
+
+        ### initialize hyperparameters (save to/ load from json)
+        hyper_params = train_agent_utils.initialize_hyperparameters(
+            PATHS=paths,
+            config=robot_train_params,
+            n_envs=config["n_envs"],
+        )
+
+        ### create agent wrapper dict for specific robot
+        # each entry contains list of agents for specfic namespace
+        # e.g. agent_list["eval_sim"] -> [TrainingDRLAgent]
+        # needs to be a dict to work with init_robot_manager
+        agent_dict = {
+            "eval_sim": instantiate_train_drl_agents(
+                num_robots=robot_train_params["num_robots"],
+                existing_robots=existing_robots,
+                robot_model=robot_name,
+                hyperparameter_path=paths["hyperparams"],
+                ns="eval_sim",
+            )
+        }
+
+        ### create a list of Robot Managers for each agent, respectively
+        # {"eval_sim": [RobotManager]}
+        robot_manager_dict = init_robot_managers(
+            n_envs=config["n_envs"],
+            robot_type=robot_name,
+            agent_dict=agent_dict,
+            mode="eval",
+        )
+
+        ### add all robot/ agent managers for current robot type to task manager
+        task_manager.add_robot_manager(
+            robot_type=robot_name, managers=robot_manager_dict["eval_sim"]
+        )
+
+        ### create PettingZoo environment
+        env = FlatlandPettingZooEnv(
+            agent_list=agent_dict["eval_sim"],
+            ns="eval_sim",
+            task_manager_reset=task_manager.reset,
+            max_num_moves_per_eps=config["periodic_eval"]["max_num_moves_per_eps"],
+        )
+
+        existing_robots += robot_train_params["num_robots"]
+
+        ### load model
+        sys.modules["rl_agent"] = sys.modules["rosnav"]
+        # custom policy relies on ros parameter for model to get the correct model parameters.
+        rospy.set_param("model", robot_name)
+        # load flag
+        assert os.path.isfile(
+            os.path.join(robot_train_params["resume"], "best_model.zip")
+        ), f"Couldn't find best model in {robot_train_params['resume']}"
+        model = PPO.load(os.path.join(robot_train_params["resume"], "best_model.zip"))
+
+        ### add configuration for one robot to robots dictionary
+        robots[robot_name] = {
+            "model": model,
+            "env": env,
+            "n_envs": config["n_envs"],
+            "agent_dict": agent_dict,
+            "robot_train_params": robot_train_params,
+            "hyper_params": hyper_params,
+            "paths": paths,
+        }
+
+    return robots
 
 
 def initialize_hyperparameters(PATHS: dict, config: dict, n_envs: int) -> dict:

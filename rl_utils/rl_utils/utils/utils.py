@@ -5,8 +5,32 @@ from typing import Callable, List
 
 import rospkg
 import rospy
+from flatland_msgs.srv import StepWorld, StepWorldRequest
 from rl_utils.rl_utils.base_agent_wrapper import BaseDRLAgent
 from rl_utils.rl_utils.training_agent_wrapper import TrainingDRLAgent
+
+
+def call_service_takeSimStep(ns: str, t: float = None):
+    """Fast-forwards the simulation.
+
+        Description:
+            Simulates the Flatland simulation for a certain amount of seconds.
+            
+        Args:
+            ns (str): Name of the namespace (used for ROS topics).
+            t (float, optional): Time in seconds. When ``t`` is None, time is forwarded by ``step_size`` s \
+                (ROS parameter). Defaults to None.
+        """
+
+    _service_name_step = f"{ns}step_world"
+    _sim_step_client = rospy.ServiceProxy(_service_name_step, StepWorld)
+    request = StepWorldRequest() if t is None else StepWorldRequest(t)
+
+    try:
+        response = _sim_step_client(request)
+        rospy.logdebug("step service=", response)
+    except rospy.ServiceException as e:
+        rospy.logdebug(f"step Service call failed: {e}")
 
 
 def get_hyperparameter_file(filename: str) -> str:

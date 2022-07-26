@@ -66,6 +66,12 @@ class FlatlandPettingZooEnv(ParallelEnv):
         """
         self._ns = "" if ns is None or not ns else f"{ns}/"
         self._is_train_mode = rospy.get_param("/train_mode")
+        rospy.set_param(
+            f"{self._ns}training/step_mode", "apply_actions"
+        )  # "apply_actions" or "get_states"
+        rospy.set_param(
+            f"{self._ns}training/reset_mode", "reset_states"
+        )  # "reset_states" or "get_obs"
         self.metadata = {}
 
         self.agent_list: List[TrainingDRLAgent] = agent_list
@@ -142,30 +148,43 @@ class FlatlandPettingZooEnv(ParallelEnv):
         Returns:
             Dict[str, np.ndarray]: Observations dictionary in {_agent name_: _respective observations_}.
         """
-        self.agents, self.num_moves, self.terminal_observation = (
-            self.possible_agents[:],
-            0,
-            {},
-        )
 
-        # reset the reward calculator
-        for agent in self.agents:
-            self.agent_object_mapping[agent].reward_calculator.reset()
+        mode = rospy.get_param(f"{self._ns}training/reset_mode")
 
-        # reset the task manager
-        self.task_manager_reset(self.robot_model)
-        # step one timestep in the simulation to update the scene
-        if self._is_train_mode:
-            self._sim_step_client()
+        assert (
+            mode == "reset_states" or mode == "get_obs"
+        ), "Reset mode has to be either 'reset_states' or 'get_obs'"
 
-        # get first observations for the next episode
-        observations = {
-            agent: self.agent_object_mapping[agent].get_observations()[0]
-            for agent in self.agents
-        }
+        if mode == "reset_states":
+            self.agents, self.num_moves, self.terminal_observation = (
+                self.possible_agents[:],
+                0,
+                {},
+            )
 
-        self.action_provided, self.curr_actions = False, {}
-        return observations
+            # reset the reward calculator
+            for agent in self.agents:
+                self.agent_object_mapping[agent].reward_calculator.reset()
+
+            # reset the task manager
+            self.task_manager_reset(self.robot_model)
+
+            self.action_provided, self.curr_actions = False, {}
+
+            # After returning, we will manually take a step in the simulation
+            # prepare next step to return the first observations after reset
+            rospy.set_param(f"{self._ns}training/reset_mode", "get_obs")
+
+            return {agent: np.empty(5) for agent in self.agents}
+        elif mode == "get_obs":
+            # get first observations for the next episode
+            observations = {
+                agent: self.agent_object_mapping[agent].get_observations()[0]
+                for agent in self.agents
+            }
+            # We have now stepped the simulation and can return the obs and prepare for next reset
+            rospy.set_param(f"{self._ns}training/reset_mode", "reset_states")
+            return observations
 
     def step(
         self, actions: Dict[str, np.ndarray]
@@ -189,6 +208,10 @@ class FlatlandPettingZooEnv(ParallelEnv):
 
         Args:
             actions (Dict[str, np.ndarray]): Actions dictionary in {_agent name_: _respective observations_}.
+            mode (str): Mode of step. Steps have to be devided into a apply action step, that simply publishes the action, \
+            so that one can then manally step the simulation, and then again call the step function but this time to \
+            retrieves the states.
+            Modes to chose from: ['apply_actions', 'get_states'].
 
         Returns:
             Tuple[ Dict[str, np.ndarray], Dict[str, float], Dict[str, bool], Dict[str, Dict[str, Any]], ]: Observations, \
@@ -198,60 +221,88 @@ class FlatlandPettingZooEnv(ParallelEnv):
             Done reasons are mapped as follows: __0__ - episode length exceeded, __1__ - agent crashed, \
                 __2__ - agent reached its goal.
         """
+        ### NEW IDEA
+
+        mode = rospy.get_param(f"{self._ns}training/step_mode")
+
+        assert (
+            mode == "apply_actions" or mode == "get_states"
+        ), "Step mode has to be either 'apply_action' or 'get_states'"
+
+        if mode == "apply_actions":
+            # First step is to apply the actions to each agent
+            self.apply_action(actions)
+            dones = {agent: False for agent in self.agents}
+            rewards = {agent: 0 for agent in self.agents}
+            infos = {agent: 0 for agent in self.agents}
+            obss = {agent: np.empty(5) for agent in self.agents}
+
+            # After returning, we will manually take a step in the simulation
+            # prepare next step to reurt the states
+            rospy.set_param(f"{self._ns}training/step_mode", "get_states")
+            return obss, rewards, dones, infos
+        elif mode == "get_states":
+
+            # We have now stepped the simulation and can get the states
+            rospy.set_param(f"{self._ns}training/step_mode", "apply_actions")
+            return self.get_states()
+
+        ### OLD IDEA
         # If a user passes in actions with no agents, then just return empty observations, etc.
-        if not actions:
-            self.agents = []
-            return {}, {}, {}, {}
+        # if not actions:
+        #     self.agents = []
+        #     return {}, {}, {}, {}
 
-        # actions
-        for agent in self.possible_agents:
-            if agent in actions:
-                self.agent_object_mapping[agent].publish_action(actions[agent])
-            else:
-                noop = np.zeros(shape=self.action_space(agent).shape)
-                self.agent_object_mapping[agent].publish_action(noop)
+        # # actions
+        # for agent in self.possible_agents:
+        #     if agent in actions:
+        #         self.agent_object_mapping[agent].publish_action(actions[agent])
+        #     else:
+        #         noop = np.zeros(shape=self.action_space(agent).shape)
+        #         self.agent_object_mapping[agent].publish_action(noop)
 
-        # fast-forward simulation
-        self.call_service_takeSimStep()
-        self.num_moves += 1
+        # # todo: remove this function call from pettingZoo env step.
+        # # fast-forward simulation
+        # self.call_service_takeSimStep()
+        # self.num_moves += 1
 
-        merged_obs, rewards, reward_infos = {}, {}, {}
+        # merged_obs, rewards, reward_infos = {}, {}, {}
 
-        for agent in actions:
-            # observations
-            merged, _dict = self.agent_object_mapping[agent].get_observations()
-            merged_obs[agent] = merged
+        # for agent in actions:
+        #     # observations
+        #     merged, _dict = self.agent_object_mapping[agent].get_observations()
+        #     merged_obs[agent] = merged
 
-            # rewards and infos
-            reward, reward_info = self.agent_object_mapping[agent].get_reward(
-                action=actions[agent], obs_dict=_dict
-            )
-            rewards[agent], reward_infos[agent] = reward, reward_info
+        #     # rewards and infos
+        #     reward, reward_info = self.agent_object_mapping[agent].get_reward(
+        #         action=actions[agent], obs_dict=_dict
+        #     )
+        #     rewards[agent], reward_infos[agent] = reward, reward_info
 
-        # dones & infos
-        dones, infos = self._get_dones(reward_infos), self._get_infos(reward_infos)
+        # # dones & infos
+        # dones, infos = self._get_dones(reward_infos), self._get_infos(reward_infos)
 
-        # remove done agents from the active agents list
-        self.agents = [agent for agent in self.agents if not dones[agent]]
+        # # remove done agents from the active agents list
+        # self.agents = [agent for agent in self.agents if not dones[agent]]
 
-        for agent in self.possible_agents:
-            # agent is done in this episode
-            if agent in dones and dones[agent]:
-                self.terminal_observation[agent] = merged_obs[agent]
-                infos[agent]["terminal_observation"] = merged_obs[agent]
-            # agent is done since atleast last episode
-            elif agent not in self.agents:
-                if agent not in infos:
-                    infos[agent] = {}
-                infos[agent]["terminal_observation"] = self.terminal_observation[agent]
+        # for agent in self.possible_agents:
+        #     # agent is done in this episode
+        #     if agent in dones and dones[agent]:
+        #         self.terminal_observation[agent] = merged_obs[agent]
+        #         infos[agent]["terminal_observation"] = merged_obs[agent]
+        #     # agent is done since atleast last episode
+        #     elif agent not in self.agents:
+        #         if agent not in infos:
+        #             infos[agent] = {}
+        #         infos[agent]["terminal_observation"] = self.terminal_observation[agent]
 
-        return merged_obs, rewards, dones, infos
+        # return merged_obs, rewards, dones, infos
 
-    def apply_action(self, actions: np.ndarray) -> None:
+    def apply_action(self, actions: dict) -> None:
         """_summary_
 
         Args:
-            action (np.ndarray): _description_
+            action (dict): _description_
 
         Returns:
             _type_: _description_
@@ -319,23 +370,23 @@ class FlatlandPettingZooEnv(ParallelEnv):
     def max_num_agents(self):
         return len(self.agents)
 
-    def call_service_takeSimStep(self, t: float = None):
-        """Fast-forwards the simulation.
+    # def call_service_takeSimStep(self, t: float = None):
+    #     """Fast-forwards the simulation.
 
-        Description:
-            Simulates the Flatland simulation for a certain amount of seconds.
-            
-        Args:
-            t (float, optional): Time in seconds. When ``t`` is None, time is forwarded by ``step_size`` s \
-                (ROS parameter). Defaults to None.
-        """
-        request = StepWorldRequest() if t is None else StepWorldRequest(t)
+    #     Description:
+    #         Simulates the Flatland simulation for a certain amount of seconds.
 
-        try:
-            response = self._sim_step_client(request)
-            rospy.logdebug("step service=", response)
-        except rospy.ServiceException as e:
-            rospy.logdebug(f"step Service call failed: {e}")
+    #     Args:
+    #         t (float, optional): Time in seconds. When ``t`` is None, time is forwarded by ``step_size`` s \
+    #             (ROS parameter). Defaults to None.
+    #     """
+    #     request = StepWorldRequest() if t is None else StepWorldRequest(t)
+
+    #     try:
+    #         response = self._sim_step_client(request)
+    #         rospy.logdebug("step service=", response)
+    #     except rospy.ServiceException as e:
+    #         rospy.logdebug(f"step Service call failed: {e}")
 
     def _get_dones(self, reward_infos: Dict[str, Dict[str, Any]]) -> Dict[str, bool]:
         """Extracts end flags from the reward information dictionary.

@@ -9,6 +9,7 @@ import rospkg
 import rospy
 from rl_utils.rl_utils.envs.pettingzoo_env import env_fn
 from rl_utils.rl_utils.training_agent_wrapper import TrainingDRLAgent
+from rl_utils.rl_utils.utils.heterogenous_ppo import Heterogenous_PPO
 from rl_utils.rl_utils.utils.supersuit_utils import vec_env_create
 from rl_utils.rl_utils.utils.utils import instantiate_train_drl_agents
 from rosnav.model.agent_factory import AgentFactory
@@ -43,7 +44,7 @@ from training.tools.train_agent_utils import (
 def main(args):
     # load configuration
     config = load_config(args.config)
-    robot_names = [robot for robot in config["robots"].keys()]
+    robot_names = list(config["robots"].keys())
 
     # set debug_mode
     rospy.set_param("debug_mode", config["debug_mode"])
@@ -57,28 +58,35 @@ def main(args):
 
     start = time.time()
     # Currently still only executes the model.learn() for one robot!!!
-    try:
-        model = robots[robot_names[0]]["model"]
-        model.learn(
-            total_timesteps=n_timesteps,
-            reset_num_timesteps=True,
-            callback=get_evalcallback(
-                robot_name=robot_names[0],
-                train_env=robots[robot_names[0]]["env"],
-                num_robots=robots[robot_names[0]]["robot_train_params"]["num_robots"],
-                num_envs=config["n_envs"],
-                agent_dict=robots[robot_names[0]]["agent_dict"],
-                config=config,
-                PATHS=robots[robot_names[0]]["paths"],
-            ),
-        )
-    except KeyboardInterrupt:
-        print("KeyboardInterrupt..")
+    # try:
+    model = robots[robot_names[0]]["model"]
+    model.learn(
+        total_timesteps=n_timesteps,
+        reset_num_timesteps=True,
+        callback=get_evalcallback(
+            robot_name=robot_names[0],
+            train_env=robots[robot_names[0]]["env"],
+            num_robots=robots[robot_names[0]]["robot_train_params"]["num_robots"],
+            num_envs=config["n_envs"],
+            agent_dict=robots[robot_names[0]]["agent_dict"],
+            config=config,
+            PATHS=robots[robot_names[0]]["paths"],
+        ),
+    )
+
+    # agent_ppo_dict = {agent: robots[agent]["model"] for agent in robot_names}
+    # agent_env_dict = {agent: robots[agent]["env"] for agent in robot_names}
+
+    # het_ppo = Heterogenous_PPO(agent_ppo_dict, agent_env_dict)
+    # het_ppo.learn(total_timesteps=n_timesteps)
+
+    # except KeyboardInterrupt:
+    #     print("KeyboardInterrupt..")
     # finally:
     # update the timesteps the model has trained in total
     # update_total_timesteps_json(n_timesteps, PATHS)
 
-    robots[robot_names[0]][model].env.close()
+    # robots[robot_names[0]][model].env.close()
     print(f"Time passed: {time.time() - start}s")
     print("Training script will be terminated")
     sys.exit()

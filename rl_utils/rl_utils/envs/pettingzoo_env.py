@@ -66,6 +66,7 @@ class FlatlandPettingZooEnv(ParallelEnv):
         """
         self._ns = "" if ns is None or not ns else f"{ns}/"
         self._is_train_mode = rospy.get_param("/train_mode")
+        rospy.set_param(f"{self._ns}training/step_mode", "apply_actions")
         self.metadata = {}
 
         self.agent_list: List[TrainingDRLAgent] = agent_list
@@ -170,7 +171,7 @@ class FlatlandPettingZooEnv(ParallelEnv):
         return observations
 
     def step(
-        self, actions: Dict[str, np.ndarray], mode: str
+        self, actions: Dict[str, np.ndarray]
     ) -> Tuple[
         Dict[str, np.ndarray],
         Dict[str, float],
@@ -206,18 +207,28 @@ class FlatlandPettingZooEnv(ParallelEnv):
         """
         ### NEW IDEA
 
+        mode = rospy.get_param(f"{self._ns}training/step_mode")
+
         assert (
             mode == "apply_actions" or mode == "get_states"
         ), "Mode has to be either 'apply_action' or 'get_states'"
 
         if mode == "apply_actions":
+            # First step is to apply the actions to each agent
             self.apply_action(actions)
             dones = {agent: False for agent in self.agents}
             rewards = {agent: 0 for agent in self.agents}
             infos = {agent: 0 for agent in self.agents}
             obss = {agent: np.empty(5) for agent in self.agents}
+
+            # After returning, we will manually take a step in the simulation
+            # prepare next step to reurt the states
+            rospy.set_param(f"{self._ns}training/step_mode", "get_states")
             return obss, rewards, dones, infos
         elif mode == "get_states":
+
+            # We have now stepped the simulation and can get the states
+            rospy.set_param(f"{self._ns}training/step_mode", "apply_actions")
             return self.get_states()
 
         ### OLD IDEA

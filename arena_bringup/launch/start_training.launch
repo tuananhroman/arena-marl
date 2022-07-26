@@ -1,21 +1,9 @@
 <launch>
-<!-- map folder -->
-  <!-- <arg name="ns_prefix"       value="sim" />
+  <!-- <arg name="model" default="burger"      doc="model type [burger, jackal, ridgeback, agvota, rto, rto_real]"/>
+  <param name="model" value="$(arg model)" /> -->
 
-  <arg name="train_mode"      default="true" />
-  <arg name="num_envs"        default="1" />
-  <arg name="map_folder_name" default="map_empty" />
-
-  <rosparam file="$(find arena_bringup)/launch/start_flatland.yaml" command="load" />
-  <arg name="map_path" default="$(find arena-simulation-setup)/maps/$(arg map_folder_name)/map.yaml" />
-  <param name="world_path" value="$(find arena-simulation-setup)/maps/$(arg map_folder_name)/map.world.yaml" /> -->
-
-
-  <arg name="model" default="burger"      doc="model type [burger, jackal, ridgeback, agvota, rto, rto_real]"/>
-  <param name="model" value="$(arg model)" />
-
-  <arg name="local_planner" default="rosnav"   doc="local-planer type [teb, dwa, mpc, rlca, cadrl, arena, rosnav]"/>
-  <param name="local_planner" value="$(arg local_planner)"/>
+  <!-- <arg name="local_planner" default="rosnav"   doc="local-planer type [teb, dwa, mpc, rlca, cadrl, arena, rosnav]"/>
+  <param name="local_planner" value="$(arg local_planner)"/> -->
 
   <!-- Here are the argument that may be frequently changed -->
   <arg name="ns_prefix" default="/sim_" />
@@ -70,20 +58,16 @@
     <node name="action_publisher" pkg="arena_local_planner_drl" type="action_publisher.py"/>
   </group>
 
-  <!-- visualization -->
-  <!-- <group if="$(eval arg('show_viz') == true)"> -->
-  <!-- makes sure that action's will be published according to sim time in eval mode-->
-    <!-- <include file="$(find arena_bringup)/launch/visualization_training.launch" > -->
-      <!-- <arg name="rviz_file" value="nav_MARL"/> -->
-    <!-- </include> -->
-  <!-- </group> -->
-
   <!-- set the log format -->
   <env name="ROSCONSOLE_FORMAT" value="[${severity} ${time} ${logger}]: ${message}" />
+
+  <!-- Start one env for the evaluation phase -->
   <include file="$(find arena_bringup)/launch/sublaunch_training/marl_single_env_training.launch">
     <arg name="ns" value="eval_sim" />
     <arg name="num_robots" value="$(arg num_robots)" />
   </include>
+
+  <!-- Start n envs for the training phase -->
   <include file="$(find arena_bringup)/launch/sublaunch_training/start_envs.launch">
     <arg name="num_envs" value="$(arg num_envs)" />
     <arg name="ns_prefix" value="$(arg ns_prefix)" />

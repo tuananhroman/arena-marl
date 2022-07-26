@@ -11,14 +11,16 @@ from supersuit.vector import ConcatVecEnv, MarkovVectorEnv
 class MarkovVectorEnv_patched(MarkovVectorEnv):
     """Patched environment wrapper which creates the correct API for vector environments. Dones for dead agents are returned as True instead as False."""
 
-    def step(self, actions):
+    # def step(self, actions):
+    def step(self, actions, mode):
         agent_set = set(self.par_env.agents)
         act_dict = {
             agent: actions[i]
             for i, agent in enumerate(self.par_env.possible_agents)
             if agent in agent_set
         }
-        observations, rewards, dones, infos = self.par_env.step(act_dict)
+        # observations, rewards, dones, infos = self.par_env.step(act_dict)
+        observations, rewards, dones, infos = self.par_env.step(act_dict, mode)
 
         # adds last observation to info where user can get it
         if all(dones.values()):

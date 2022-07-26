@@ -156,16 +156,18 @@ def create_training_setup(config: dict) -> dict:
             config["tb"],
         )
 
-        # initialize hyperparameters (save to/ load from json)
+        ### initialize hyperparameters (save to/ load from json)
         hyper_params = train_agent_utils.initialize_hyperparameters(
             PATHS=paths,
             config=robot_train_params,
             n_envs=config["n_envs"],
         )
 
-        # create agent wrapper dict for specific robot
+        ### create agent wrapper dict for specific robot
+        # custom policy relies on ros parameter for model to get the correct model parameters.
+        rospy.set_param("model", robot_name)
         # each entry contains list of agents for specfic namespace
-        # e.g. agent_list["sim_1"] -> [TrainingDRLAgent]
+        # e.g. agent_dict["sim_1"] -> [TrainingDRLAgent]
         agent_dict = {
             f"sim_{i}": instantiate_train_drl_agents(
                 num_robots=robot_train_params["num_robots"],
@@ -249,7 +251,7 @@ def create_deployment_setup(config: dict) -> dict:
     task_manager = get_task_manager(
         ns="eval_sim",
         mode=config["task_mode"],
-        curriculum_path=config["training_curriculum"]["training_curriculum_file"],
+        curriculum_path=config["evaluation_curriculum"]["evaluation_curriculum_file"],
     )
 
     ### create and set obstacle manager
@@ -270,7 +272,7 @@ def create_deployment_setup(config: dict) -> dict:
             robot_name,
             agent_name,
             robot_train_params,
-            config["training_curriculum"]["training_curriculum_file"],
+            config["evaluation_curriculum"]["evaluation_curriculum_file"],
             config["eval_log"],
             config["tb"],
         )

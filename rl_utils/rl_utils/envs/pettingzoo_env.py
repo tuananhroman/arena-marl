@@ -154,9 +154,11 @@ class FlatlandPettingZooEnv(ParallelEnv):
 
         # reset the task manager
         self.task_manager_reset(self.robot_model)
+
+        # todo: perform this step manually before all resets for the PettingZoo envs happen
         # step one timestep in the simulation to update the scene
-        if self._is_train_mode:
-            self._sim_step_client()
+        # if self._is_train_mode:
+        #     self._sim_step_client()
 
         # get first observations for the next episode
         observations = {
@@ -168,7 +170,7 @@ class FlatlandPettingZooEnv(ParallelEnv):
         return observations
 
     def step(
-        self, actions: Dict[str, np.ndarray]
+        self, actions: Dict[str, np.ndarray], mode: str
     ) -> Tuple[
         Dict[str, np.ndarray],
         Dict[str, float],
@@ -189,6 +191,10 @@ class FlatlandPettingZooEnv(ParallelEnv):
 
         Args:
             actions (Dict[str, np.ndarray]): Actions dictionary in {_agent name_: _respective observations_}.
+            mode (str): Mode of step. Steps have to be devided into a apply action step, that simply publishes the action, \
+            so that one can then manally step the simulation, and then again call the step function but this time to \
+            retrieves the states.
+            Modes to chose from: ['apply_actions', 'get_states'].
 
         Returns:
             Tuple[ Dict[str, np.ndarray], Dict[str, float], Dict[str, bool], Dict[str, Dict[str, Any]], ]: Observations, \
@@ -198,54 +204,72 @@ class FlatlandPettingZooEnv(ParallelEnv):
             Done reasons are mapped as follows: __0__ - episode length exceeded, __1__ - agent crashed, \
                 __2__ - agent reached its goal.
         """
+        ### NEW IDEA
+
+        assert (
+            mode == "apply_actions" or mode == "get_states"
+        ), "Mode has to be either 'apply_action' or 'get_states'"
+
+        if mode == "apply_actions":
+            self.apply_action(actions)
+            dones = {agent: False for agent in self.agents}
+            rewards = {agent: 0 for agent in self.agents}
+            infos = {agent: 0 for agent in self.agents}
+            obss = {agent: np.empty(5) for agent in self.agents}
+            return obss, rewards, dones, infos
+        elif mode == "get_states":
+            return self.get_states()
+
+        ### OLD IDEA
         # If a user passes in actions with no agents, then just return empty observations, etc.
-        if not actions:
-            self.agents = []
-            return {}, {}, {}, {}
+        # if not actions:
+        #     self.agents = []
+        #     return {}, {}, {}, {}
 
-        # actions
-        for agent in self.possible_agents:
-            if agent in actions:
-                self.agent_object_mapping[agent].publish_action(actions[agent])
-            else:
-                noop = np.zeros(shape=self.action_space(agent).shape)
-                self.agent_object_mapping[agent].publish_action(noop)
+        # # actions
+        # for agent in self.possible_agents:
+        #     if agent in actions:
+        #         self.agent_object_mapping[agent].publish_action(actions[agent])
+        #     else:
+        #         noop = np.zeros(shape=self.action_space(agent).shape)
+        #         self.agent_object_mapping[agent].publish_action(noop)
 
-        # fast-forward simulation
-        self.call_service_takeSimStep()
-        self.num_moves += 1
+        # # todo: remove this function call from pettingZoo env step.
+        # # fast-forward simulation
+        # self.call_service_takeSimStep()
+        # self.num_moves += 1
 
-        merged_obs, rewards, reward_infos = {}, {}, {}
+        # merged_obs, rewards, reward_infos = {}, {}, {}
 
-        for agent in actions:
-            # observations
-            merged, _dict = self.agent_object_mapping[agent].get_observations()
-            merged_obs[agent] = merged
+        # for agent in actions:
+        #     # observations
+        #     merged, _dict = self.agent_object_mapping[agent].get_observations()
+        #     merged_obs[agent] = merged
 
-            # rewards and infos
-            reward, reward_info = self.agent_object_mapping[agent].get_reward(
-                action=actions[agent], obs_dict=_dict
-            )
-            rewards[agent], reward_infos[agent] = reward, reward_info
+        #     # rewards and infos
+        #     reward, reward_info = self.agent_object_mapping[agent].get_reward(
+        #         action=actions[agent], obs_dict=_dict
+        #     )
+        #     rewards[agent], reward_infos[agent] = reward, reward_info
 
-        # dones & infos
-        dones, infos = self._get_dones(reward_infos), self._get_infos(reward_infos)
+        # # dones & infos
+        # dones, infos = self._get_dones(reward_infos), self._get_infos(reward_infos)
 
-        # remove done agents from the active agents list
-        self.agents = [agent for agent in self.agents if not dones[agent]]
+        # # remove done agents from the active agents list
+        # self.agents = [agent for agent in self.agents if not dones[agent]]
 
-        for agent in self.possible_agents:
-            # agent is done in this episode
-            if agent in dones and dones[agent]:
-                self.terminal_observation[agent] = merged_obs[agent]
-                infos[agent]["terminal_observation"] = merged_obs[agent]
-            # agent is done since atleast last episode
-            elif agent not in self.agents:
-                if agent not in infos:
-                    infos[agent] = {}
-                infos[agent]["terminal_observation"] = self.terminal_observation[agent]
+        # for agent in self.possible_agents:
+        #     # agent is done in this episode
+        #     if agent in dones and dones[agent]:
+        #         self.terminal_observation[agent] = merged_obs[agent]
+        #         infos[agent]["terminal_observation"] = merged_obs[agent]
+        #     # agent is done since atleast last episode
+        #     elif agent not in self.agents:
+        #         if agent not in infos:
+        #             infos[agent] = {}
+        #         infos[agent]["terminal_observation"] = self.terminal_observation[agent]
 
-        return merged_obs, rewards, dones, infos
+        # return merged_obs, rewards, dones, infos
 
     def apply_action(self, actions: dict) -> None:
         """_summary_
@@ -324,7 +348,7 @@ class FlatlandPettingZooEnv(ParallelEnv):
 
         Description:
             Simulates the Flatland simulation for a certain amount of seconds.
-            
+
         Args:
             t (float, optional): Time in seconds. When ``t`` is None, time is forwarded by ``step_size`` s \
                 (ROS parameter). Defaults to None.

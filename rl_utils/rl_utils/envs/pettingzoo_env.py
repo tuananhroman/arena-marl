@@ -66,7 +66,12 @@ class FlatlandPettingZooEnv(ParallelEnv):
         """
         self._ns = "" if ns is None or not ns else f"{ns}/"
         self._is_train_mode = rospy.get_param("/train_mode")
-        rospy.set_param(f"{self._ns}training/step_mode", "apply_actions")
+        rospy.set_param(
+            f"{self._ns}training/step_mode", "apply_actions"
+        )  # "apply_actions" or "get_states"
+        rospy.set_param(
+            f"{self._ns}training/reset_mode", "reset_states"
+        )  # "reset_states" or "get_obs"
         self.metadata = {}
 
         self.agent_list: List[TrainingDRLAgent] = agent_list
@@ -143,32 +148,43 @@ class FlatlandPettingZooEnv(ParallelEnv):
         Returns:
             Dict[str, np.ndarray]: Observations dictionary in {_agent name_: _respective observations_}.
         """
-        self.agents, self.num_moves, self.terminal_observation = (
-            self.possible_agents[:],
-            0,
-            {},
-        )
 
-        # reset the reward calculator
-        for agent in self.agents:
-            self.agent_object_mapping[agent].reward_calculator.reset()
+        mode = rospy.get_param(f"{self._ns}training/reset_mode")
 
-        # reset the task manager
-        self.task_manager_reset(self.robot_model)
+        assert (
+            mode == "reset_states" or mode == "get_obs"
+        ), "Reset mode has to be either 'reset_states' or 'get_obs'"
 
-        # todo: perform this step manually before all resets for the PettingZoo envs happen
-        # step one timestep in the simulation to update the scene
-        # if self._is_train_mode:
-        #     self._sim_step_client()
+        if mode == "reset_states":
+            self.agents, self.num_moves, self.terminal_observation = (
+                self.possible_agents[:],
+                0,
+                {},
+            )
 
-        # get first observations for the next episode
-        observations = {
-            agent: self.agent_object_mapping[agent].get_observations()[0]
-            for agent in self.agents
-        }
+            # reset the reward calculator
+            for agent in self.agents:
+                self.agent_object_mapping[agent].reward_calculator.reset()
 
-        self.action_provided, self.curr_actions = False, {}
-        return observations
+            # reset the task manager
+            self.task_manager_reset(self.robot_model)
+
+            self.action_provided, self.curr_actions = False, {}
+
+            # After returning, we will manually take a step in the simulation
+            # prepare next step to return the first observations after reset
+            rospy.set_param(f"{self._ns}training/reset_mode", "get_obs")
+
+            return {agent: np.empty(5) for agent in self.agents}
+        elif mode == "get_obs":
+            # get first observations for the next episode
+            observations = {
+                agent: self.agent_object_mapping[agent].get_observations()[0]
+                for agent in self.agents
+            }
+            # We have now stepped the simulation and can return the obs and prepare for next reset
+            rospy.set_param(f"{self._ns}training/reset_mode", "reset_states")
+            return observations
 
     def step(
         self, actions: Dict[str, np.ndarray]
@@ -211,7 +227,7 @@ class FlatlandPettingZooEnv(ParallelEnv):
 
         assert (
             mode == "apply_actions" or mode == "get_states"
-        ), "Mode has to be either 'apply_action' or 'get_states'"
+        ), "Step mode has to be either 'apply_action' or 'get_states'"
 
         if mode == "apply_actions":
             # First step is to apply the actions to each agent
@@ -354,23 +370,23 @@ class FlatlandPettingZooEnv(ParallelEnv):
     def max_num_agents(self):
         return len(self.agents)
 
-    def call_service_takeSimStep(self, t: float = None):
-        """Fast-forwards the simulation.
+    # def call_service_takeSimStep(self, t: float = None):
+    #     """Fast-forwards the simulation.
 
-        Description:
-            Simulates the Flatland simulation for a certain amount of seconds.
+    #     Description:
+    #         Simulates the Flatland simulation for a certain amount of seconds.
 
-        Args:
-            t (float, optional): Time in seconds. When ``t`` is None, time is forwarded by ``step_size`` s \
-                (ROS parameter). Defaults to None.
-        """
-        request = StepWorldRequest() if t is None else StepWorldRequest(t)
+    #     Args:
+    #         t (float, optional): Time in seconds. When ``t`` is None, time is forwarded by ``step_size`` s \
+    #             (ROS parameter). Defaults to None.
+    #     """
+    #     request = StepWorldRequest() if t is None else StepWorldRequest(t)
 
-        try:
-            response = self._sim_step_client(request)
-            rospy.logdebug("step service=", response)
-        except rospy.ServiceException as e:
-            rospy.logdebug(f"step Service call failed: {e}")
+    #     try:
+    #         response = self._sim_step_client(request)
+    #         rospy.logdebug("step service=", response)
+    #     except rospy.ServiceException as e:
+    #         rospy.logdebug(f"step Service call failed: {e}")
 
     def _get_dones(self, reward_infos: Dict[str, Dict[str, Any]]) -> Dict[str, bool]:
         """Extracts end flags from the reward information dictionary.

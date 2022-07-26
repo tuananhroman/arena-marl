@@ -6,8 +6,10 @@ import rospy
 
 # from stable_baselines3.common.vec_env import VecNormalize
 from supersuit.vector import ConcatVecEnv, MarkovVectorEnv
+from rl_utils.rl_utils.utils.utils import call_service_takeSimStep
 
-
+### TODO: Adjust this class to heterogeneous training cases
+#         Only reset env and take SimStep when all other envs are also done.
 class MarkovVectorEnv_patched(MarkovVectorEnv):
     """Patched environment wrapper which creates the correct API for vector environments. Dones for dead agents are returned as True instead as False."""
 

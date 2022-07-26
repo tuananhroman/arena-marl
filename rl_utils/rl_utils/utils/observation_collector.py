@@ -184,13 +184,13 @@ class ObservationCollector:
 
     def get_observations(self, *args, **kwargs):
         # apply action time horizon
-        if self._is_train_mode:
-            self.call_service_takeSimStep(self._action_frequency)
-        else:
-            try:
-                rospy.wait_for_message(f"{self.ns_prefix}next_cycle", Bool)
-            except Exception:
-                pass
+        # if self._is_train_mode:
+        # self.call_service_takeSimStep(self._action_frequency)
+        # else:
+        #     try:
+        #         rospy.wait_for_message(f"{self.ns_prefix}next_cycle", Bool)
+        #     except Exception:
+        #         pass
 
         if not self._ext_time_sync:
             # try to retrieve sync'ed obs

@@ -5,7 +5,7 @@ debug_mode: true
 # number of parallel environments
 n_envs: 2
 # gpu yes or no
-no_gpu: false
+no_gpu: yes
 
 
 ### Global configuration that applies to all robots
@@ -55,7 +55,7 @@ robots:
     architecture_name: "AGENT_24"
     # path to latest checkpoint; if provided the training will be resumed from that checkpoint
     resume: null
-  burger:
+  rto:
     # number of robots of this type
     num_robots: 2
     # name of hyperparameter file located in the configs/hyperparameters directory

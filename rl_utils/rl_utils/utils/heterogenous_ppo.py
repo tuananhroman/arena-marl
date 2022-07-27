@@ -56,6 +56,9 @@ class Heterogenous_PPO(object):
         self.start_time = time.time()
 
         for _, ppo in self.agent_ppo_dict.items():
+            ppo.device = "cpu"
+            ppo.policy.cpu()
+
             if ppo.ep_info_buffer is None or reset_num_timesteps:
                 ppo.ep_info_buffer = deque(maxlen=100)
                 ppo.ep_success_buffer = deque(maxlen=100)

@@ -27,7 +27,7 @@ get_robot_as = lambda robot_type: os.path.join(
     rospkg.RosPack().get_path("arena-simulation-setup"),
     "robot",
     f"{robot_type}",
-    "default_settings.yaml",
+    "model_params.yaml",
 )
 
 get_robot_yaml = lambda robot_type: os.path.join(
@@ -115,7 +115,7 @@ class RobotManager:
         with open(robot_as_path, "r", encoding="utf-8") as target:
             config = yaml.load(target, Loader=yaml.FullLoader)
 
-        self.ROBOT_RADIUS = config["robot"]["radius"]
+        self.ROBOT_RADIUS = config["robot_radius"]
 
         robot_yaml_path = get_robot_yaml(self.robot_type)
         with open(robot_yaml_path, "r") as f:

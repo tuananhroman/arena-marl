@@ -66,11 +66,11 @@ class BaseDRLAgent(ABC):
             rospkg.RosPack().get_path("arena-simulation-setup"),
             "robot",
             f"{self.robot_model}",
-            "default_settings.yaml",
+            "model_params.yaml",
         )
 
-        self.load_hyperparameters(path=hyperparameter_path)
         self.read_setting_files(robot_setting_path, action_space_path)
+        self.load_hyperparameters(path=hyperparameter_path)
         # self._check_robot_type_from_params()
 
         self.setup_action_space()
@@ -145,7 +145,7 @@ class BaseDRLAgent(ABC):
         with open(action_space_yaml, "r", encoding="utf-8") as target:
             config = yaml.load(target, Loader=yaml.FullLoader)
 
-        self._robot_radius = config["robot"]["radius"] * 1.05
+        self._robot_radius = config["robot_radius"] * 1.05
 
         with open(robot_setting_yaml, "r") as fd:
             robot_data = yaml.safe_load(fd)
@@ -181,16 +181,14 @@ class BaseDRLAgent(ABC):
         with open(action_space_yaml, "r") as fd:
             setting_data = yaml.safe_load(fd)
 
-            self._holonomic = setting_data["robot"]["holonomic"]
-            self._discrete_actions = setting_data["robot"]["discrete_actions"]
+            self._holonomic = setting_data["is_holonomic"]
+            self._discrete_actions = setting_data["actions"]["discrete"]
             self._cont_actions = {
-                "linear_range": setting_data["robot"]["continuous_actions"][
-                    "linear_range"
-                ],
-                "angular_range": setting_data["robot"]["continuous_actions"][
-                    "angular_range"
-                ],
+                "linear_range": setting_data["actions"]["continuous"]["linear_range"],
+                "angular_range": setting_data["actions"]["continuous"]["angular_range"],
             }
+
+        rospy.set_param("laser/num_beams", self._num_laser_beams)
 
     def _check_robot_type_from_params(self):
         """Retrives the agent-specific robot name from the dictionary loaded\

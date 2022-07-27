@@ -64,26 +64,26 @@ def main(args):
     start = time.time()
     # Currently still only executes the model.learn() for one robot!!!
     # try:
-    model = robots[robot_names[0]]["model"]
-    model.learn(
-        total_timesteps=n_timesteps,
-        reset_num_timesteps=True,
-        callback=get_evalcallback(
-            robot_name=robot_names[0],
-            train_env=robots[robot_names[0]]["env"],
-            num_robots=robots[robot_names[0]]["robot_train_params"]["num_robots"],
-            num_envs=config["n_envs"],
-            agent_dict=robots[robot_names[0]]["agent_dict"],
-            config=config,
-            PATHS=robots[robot_names[0]]["paths"],
-        ),
-    )
+    # model = robots[robot_names[0]]["model"]
+    # model.learn(
+    #     total_timesteps=n_timesteps,
+    #     reset_num_timesteps=True,
+    #     callback=get_evalcallback(
+    #         robot_name=robot_names[0],
+    #         train_env=robots[robot_names[0]]["env"],
+    #         num_robots=robots[robot_names[0]]["robot_train_params"]["num_robots"],
+    #         num_envs=config["n_envs"],
+    #         agent_dict=robots[robot_names[0]]["agent_dict"],
+    #         config=config,
+    #         PATHS=robots[robot_names[0]]["paths"],
+    #     ),
+    # )
 
-    # agent_ppo_dict = {agent: robots[agent]["model"] for agent in robot_names}
-    # agent_env_dict = {agent: robots[agent]["env"] for agent in robot_names}
+    agent_ppo_dict = {agent: robots[agent]["model"] for agent in robot_names}
+    agent_env_dict = {agent: robots[agent]["env"] for agent in robot_names}
 
-    # het_ppo = Heterogenous_PPO(agent_ppo_dict, agent_env_dict)
-    # het_ppo.learn(total_timesteps=n_timesteps)
+    het_ppo = Heterogenous_PPO(agent_ppo_dict, agent_env_dict, config["n_envs"])
+    het_ppo.learn(total_timesteps=n_timesteps)
 
     # except KeyboardInterrupt:
     #     print("KeyboardInterrupt..")

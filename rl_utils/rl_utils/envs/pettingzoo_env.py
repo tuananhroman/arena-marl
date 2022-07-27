@@ -66,12 +66,7 @@ class FlatlandPettingZooEnv(ParallelEnv):
         """
         self._ns = "" if ns is None or not ns else f"{ns}/"
         self._is_train_mode = rospy.get_param("/train_mode")
-        rospy.set_param(
-            f"{self._ns}training/step_mode", "apply_actions"
-        )  # "apply_actions" or "get_states"
-        rospy.set_param(
-            f"{self._ns}training/reset_mode", "reset_states"
-        )  # "reset_states" or "get_obs"
+
         self.metadata = {}
 
         self.agent_list: List[TrainingDRLAgent] = agent_list
@@ -104,6 +99,13 @@ class FlatlandPettingZooEnv(ParallelEnv):
 
         self._max_num_moves = max_num_moves_per_eps
         self.action_provided, self.curr_actions = False, {}
+
+        rospy.set_param(
+            f"{self._ns}training/{self.robot_model}/step_mode", "apply_actions"
+        )  # "apply_actions" or "get_states"
+        rospy.set_param(
+            f"{self._ns}training/{self.robot_model}/reset_mode", "reset_states"
+        )  # "reset_states" or "get_obs"
 
     def observation_space(self, agent: str) -> spaces.Box:
         """Returns specific agents' observation space.
@@ -149,7 +151,7 @@ class FlatlandPettingZooEnv(ParallelEnv):
             Dict[str, np.ndarray]: Observations dictionary in {_agent name_: _respective observations_}.
         """
 
-        mode = rospy.get_param(f"{self._ns}training/reset_mode")
+        mode = rospy.get_param(f"{self._ns}training/{self.robot_model}/reset_mode")
 
         assert (
             mode == "reset_states" or mode == "get_obs"
@@ -173,7 +175,9 @@ class FlatlandPettingZooEnv(ParallelEnv):
 
             # After returning, we will manually take a step in the simulation
             # prepare next step to return the first observations after reset
-            rospy.set_param(f"{self._ns}training/reset_mode", "get_obs")
+            rospy.set_param(
+                f"{self._ns}training/{self.robot_model}/reset_mode", "get_obs"
+            )
 
             return {agent: np.empty(5) for agent in self.agents}
         elif mode == "get_obs":
@@ -183,7 +187,9 @@ class FlatlandPettingZooEnv(ParallelEnv):
                 for agent in self.agents
             }
             # We have now stepped the simulation and can return the obs and prepare for next reset
-            rospy.set_param(f"{self._ns}training/reset_mode", "reset_states")
+            rospy.set_param(
+                f"{self._ns}training/{self.robot_model}/reset_mode", "reset_states"
+            )
             return observations
 
     def step(
@@ -223,7 +229,7 @@ class FlatlandPettingZooEnv(ParallelEnv):
         """
         ### NEW IDEA
 
-        mode = rospy.get_param(f"{self._ns}training/step_mode")
+        mode = rospy.get_param(f"{self._ns}training/{self.robot_model}/step_mode")
 
         assert (
             mode == "apply_actions" or mode == "get_states"
@@ -239,12 +245,16 @@ class FlatlandPettingZooEnv(ParallelEnv):
 
             # After returning, we will manually take a step in the simulation
             # prepare next step to reurt the states
-            rospy.set_param(f"{self._ns}training/step_mode", "get_states")
+            rospy.set_param(
+                f"{self._ns}training/{self.robot_model}/step_mode", "get_states"
+            )
             return obss, rewards, dones, infos
         elif mode == "get_states":
 
             # We have now stepped the simulation and can get the states
-            rospy.set_param(f"{self._ns}training/step_mode", "apply_actions")
+            rospy.set_param(
+                f"{self._ns}training/{self.robot_model}/step_mode", "apply_actions"
+            )
             return self.get_states()
 
         ### OLD IDEA

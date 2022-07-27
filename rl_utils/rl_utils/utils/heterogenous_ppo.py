@@ -7,6 +7,7 @@ import numpy as np
 import torch as th
 
 from rl_utils.rl_utils.envs.pettingzoo_env import FlatlandPettingZooEnv
+from rl_utils.rl_utils.utils.utils import call_service_takeSimStep
 from stable_baselines3.common.buffers import RolloutBuffer
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common import logger
@@ -19,11 +20,13 @@ class Heterogenous_PPO(object):
         self,
         agent_ppo_dict: Dict[str, PPO],
         agent_env_dict: Dict[str, SB3VecEnvWrapper],
+        n_envs: int,
         verbose: bool = True,
     ) -> None:
         self.agent_ppo_dict = agent_ppo_dict
         self.agent_env_dict = agent_env_dict
 
+        self.n_envs, self.ns_prefix = n_envs, "sim_"
         self.num_timesteps = 0
 
     def _setup_learn(
@@ -71,6 +74,7 @@ class Heterogenous_PPO(object):
 
             # Avoid resetting the environment when calling ``.learn()`` consecutive times
             if reset_num_timesteps or ppo._last_obs is None:
+                ppo.env.reset()
                 ppo._last_obs = ppo.env.reset()
                 ppo._last_dones = np.zeros((ppo.env.num_envs,), dtype=bool)
                 # Retrieve unnormalized observation for saving into the buffer
@@ -161,9 +165,10 @@ class Heterogenous_PPO(object):
                     )
 
                 # Env step for all robots
-                self.agent_env_dict[agent].apply_action(clipped_actions)
+                self.agent_env_dict[agent].step(clipped_actions)
 
-            self.agent_env_dict[agent].call_service_takeSimStep()
+            for i in range(1, self.n_envs):
+                call_service_takeSimStep(ns=self.ns_prefix + str(i))
 
             for agent, ppo in self.agent_ppo_dict.items():
                 (
@@ -171,7 +176,7 @@ class Heterogenous_PPO(object):
                     rewards,
                     agent_dones_dict[agent],
                     infos,
-                ) = self.agent_env_dict[agent].get_states()
+                ) = self.agent_env_dict[agent].step()
 
                 # TODO: Training with different number of robots (num_envs)
                 ppo.num_timesteps += self.agent_env_dict[agent].num_envs

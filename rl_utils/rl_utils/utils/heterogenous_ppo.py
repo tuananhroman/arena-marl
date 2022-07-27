@@ -170,7 +170,7 @@ class Heterogenous_PPO(object):
                 # Env step for all robots
                 self.agent_env_dict[agent].step(clipped_actions)
 
-            for i in range(1, self.n_envs):
+            for i in range(1, self.n_envs + 1):
                 call_service_takeSimStep(ns=self.ns_prefix + str(i))
 
             for agent, ppo in self.agent_ppo_dict.items():
@@ -179,7 +179,7 @@ class Heterogenous_PPO(object):
                     rewards,
                     agent_dones_dict[agent],
                     infos,
-                ) = self.agent_env_dict[agent].step()
+                ) = self.agent_env_dict[agent].step(clipped_actions)
 
                 # TODO: Training with different number of robots (num_envs)
                 ppo.num_timesteps += self.agent_env_dict[agent].num_envs

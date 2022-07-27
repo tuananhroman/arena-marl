@@ -231,9 +231,10 @@ class FlatlandPettingZooEnv(ParallelEnv):
 
         mode = rospy.get_param(f"{self._ns}training/{self.robot_model}/step_mode")
 
-        assert (
-            mode == "apply_actions" or mode == "get_states"
-        ), "Step mode has to be either 'apply_action' or 'get_states'"
+        assert mode in [
+            "apply_actions",
+            "get_states",
+        ], "Step mode has to be either 'apply_action' or 'get_states'"
 
         if mode == "apply_actions":
             # First step is to apply the actions to each agent
@@ -373,6 +374,8 @@ class FlatlandPettingZooEnv(ParallelEnv):
                 if agent not in infos:
                     infos[agent] = {}
                 infos[agent]["terminal_observation"] = self.terminal_observation[agent]
+
+        self.action_provided, self.curr_actions = False, {}
 
         return merged_obs, rewards, dones, infos
 

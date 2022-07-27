@@ -40,6 +40,7 @@ class MarkovVectorEnv_patched(MarkovVectorEnv):
 
         if all(dones.values()):
             observations = self.reset()
+            observations = self.reset()
         else:
             observations = self.concat_obs(observations)
         assert (

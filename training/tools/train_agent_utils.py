@@ -17,7 +17,7 @@ import yaml
 # from rl_utils.envs.flatland_gym_env import (
 #     FlatlandEnv,
 # )
-from rl_utils.rl_utils.envs.pettingzoo_env import env_fn, FlatlandPettingZooEnv
+from rl_utils.rl_utils.envs.pettingzoo_env import FlatlandPettingZooEnv, env_fn
 from rl_utils.rl_utils.utils.supersuit_utils import vec_env_create
 from rl_utils.rl_utils.utils.utils import instantiate_train_drl_agents
 from rosnav.model.agent_factory import AgentFactory
@@ -203,7 +203,7 @@ def create_training_setup(config: dict) -> dict:
         existing_robots += robot_train_params["num_robots"]
 
         model = choose_agent_model(
-            agent_name, paths, robot_train_params, env, hyper_params, config["n_envs"]
+            robot_name, paths, robot_train_params, env, hyper_params, config["n_envs"]
         )
 
         # add configuration for one robot to robots dictionary
@@ -762,11 +762,13 @@ def load_vec_normalize(params: dict, PATHS: dict, env: VecEnv, eval_env: VecEnv)
     return env, eval_env
 
 
-def choose_agent_model(AGENT_NAME, PATHS, config, env, params, n_envs):
+def choose_agent_model(robot_name, PATHS, config, env, params, n_envs):
     if config["resume"] is None:
         agent: Union[
             Type[BaseAgent], Type[ActorCriticPolicy]
-        ] = AgentFactory.instantiate(config["architecture_name"])
+        ] = AgentFactory.instantiate(
+            config["architecture_name"], robot_model=robot_name
+        )
         if isinstance(agent, BaseAgent):
             model = PPO(
                 agent.type.value,

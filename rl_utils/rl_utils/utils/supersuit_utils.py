@@ -3,10 +3,11 @@ from typing import Callable
 
 import numpy as np
 import rospy
+from rl_utils.rl_utils.utils.utils import call_service_takeSimStep
 
 # from stable_baselines3.common.vec_env import VecNormalize
 from supersuit.vector import ConcatVecEnv, MarkovVectorEnv
-from rl_utils.rl_utils.utils.utils import call_service_takeSimStep
+
 
 ### TODO: Adjust this class to heterogeneous training cases
 #         Only reset env and take SimStep when all other envs are also done.
@@ -38,11 +39,12 @@ class MarkovVectorEnv_patched(MarkovVectorEnv):
         )
         infs = [infos.get(agent, {}) for agent in self.par_env.possible_agents]
 
-        if all(dones.values()):
-            observations = self.reset()
-            observations = self.reset()
-        else:
-            observations = self.concat_obs(observations)
+        # Environment reset is to be checked in the "heterogenous_ppo" class!
+        # if all(dones.values()):
+        #     observations = self.reset()
+        #     observations = self.reset()
+        # else:
+        observations = self.concat_obs(observations)
         assert (
             self.black_death or self.par_env.agents == self.par_env.possible_agents
         ), "MarkovVectorEnv does not support environments with varying numbers of active agents unless black_death is set to True"

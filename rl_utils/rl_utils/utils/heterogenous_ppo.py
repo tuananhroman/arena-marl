@@ -5,12 +5,11 @@ from typing import Dict, Optional, Tuple
 import gym
 import numpy as np
 import torch as th
-
 from rl_utils.rl_utils.envs.pettingzoo_env import FlatlandPettingZooEnv
 from rl_utils.rl_utils.utils.utils import call_service_takeSimStep
+from stable_baselines3.common import logger
 from stable_baselines3.common.buffers import RolloutBuffer
 from stable_baselines3.common.callbacks import BaseCallback
-from stable_baselines3.common import logger
 from stable_baselines3.ppo.ppo import PPO
 from supersuit.vector.sb3_vector_wrapper import SB3VecEnvWrapper
 
@@ -56,8 +55,8 @@ class Heterogenous_PPO(object):
         self.start_time = time.time()
 
         for _, ppo in self.agent_ppo_dict.items():
-            ppo.device = "cpu"
-            ppo.policy.cpu()
+            # ppo.device = "cpu"
+            # ppo.policy.cpu()
 
             if ppo.ep_info_buffer is None or reset_num_timesteps:
                 ppo.ep_info_buffer = deque(maxlen=100)
@@ -191,7 +190,6 @@ class Heterogenous_PPO(object):
                 #     return False
 
                 ppo._update_info_buffer(infos)
-                n_steps += 1
 
                 if isinstance(ppo.action_space, gym.spaces.Discrete):
                     # Reshape in case of discrete action
@@ -207,6 +205,11 @@ class Heterogenous_PPO(object):
                 )
                 ppo._last_obs = agent_new_obs_dict[agent]
                 ppo._last_dones = agent_dones_dict[agent]
+
+            if Heterogenous_PPO.check_for_reset(agent_dones_dict):
+                self.reset_all_envs()
+
+            n_steps += 1
 
         for agent, ppo in self.agent_ppo_dict.items():
             with th.no_grad():
@@ -301,3 +304,14 @@ class Heterogenous_PPO(object):
 
     def _init_callback(self, callback):
         raise NotImplementedError()
+
+    @staticmethod
+    def check_for_reset(dones_dict: dict) -> bool:
+        return all(list(map(lambda x: np.all(x == 1), dones_dict.values())))
+
+    def reset_all_envs(self) -> None:
+        for agent, env in self.agent_env_dict.items():
+            # reset states
+            env.reset()
+            # retrieve new simulation state
+            self.agent_ppo_dict[agent]._last_obs = env.reset()

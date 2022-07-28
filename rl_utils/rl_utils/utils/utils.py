@@ -10,7 +10,7 @@ from rl_utils.rl_utils.base_agent_wrapper import BaseDRLAgent
 from rl_utils.rl_utils.training_agent_wrapper import TrainingDRLAgent
 
 
-def call_service_takeSimStep(ns: str, t: float = None):
+def call_service_takeSimStep(ns: str, t: float = 0.1):
     """Fast-forwards the simulation.
 
         Description:
@@ -22,7 +22,7 @@ def call_service_takeSimStep(ns: str, t: float = None):
                 (ROS parameter). Defaults to None.
         """
 
-    _service_name_step = f"{ns}step_world"
+    _service_name_step = f"{ns}/step_world"
     _sim_step_client = rospy.ServiceProxy(_service_name_step, StepWorld)
     request = StepWorldRequest() if t is None else StepWorldRequest(t)
 

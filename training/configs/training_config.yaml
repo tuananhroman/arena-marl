@@ -13,7 +13,7 @@ no_gpu: yes
 task_mode: "staged"
 # number of simulation timesteps
 n_timesteps: 40000000
-max_num_moves_per_eps: 1000
+max_num_moves_per_eps: 500
 
 periodic_eval:
   # max number of steps per episode
@@ -56,6 +56,15 @@ robots:
     # path to latest checkpoint; if provided the training will be resumed from that checkpoint
     resume: null
   rto:
+    # number of robots of this type
+    num_robots: 2
+    # name of hyperparameter file located in the configs/hyperparameters directory
+    hyperparameter_file: "default.json"
+    # name of architecture defined in the Policy factory
+    architecture_name: "AGENT_22"
+    # path to latest checkpoint; if provided the training will be resumed from that checkpoint
+    resume: null
+  burger:
     # number of robots of this type
     num_robots: 2
     # name of hyperparameter file located in the configs/hyperparameters directory

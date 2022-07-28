@@ -47,4 +47,4 @@
 - git:
     local-name: ../planners/rosnav
     uri: https://github.com/Arena-Rosnav/rosnav.git
-    version: master
+    version: marl

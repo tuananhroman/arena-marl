@@ -4,8 +4,6 @@ import time
 from datetime import time
 from multiprocessing import cpu_count, set_start_method
 
-# from typing import Callable, List
-
 # import rospkg
 import rospy
 from rl_utils.rl_utils.envs.pettingzoo_env import env_fn
@@ -44,6 +42,8 @@ from training.tools.train_agent_utils import (
     initialize_hyperparameters,
     load_config,
 )
+
+# from typing import Callable, List
 
 
 def main(args):

@@ -131,13 +131,18 @@ class Heterogenous_PPO(object):
 
         # TODO: CALLBACK
         # callback.on_rollout_start()
+        complete_collection_dict = {
+            agent: False for agent in self.agent_ppo_dict.keys()
+        }
+
         agent_actions_dict = {agent: None for agent in self.agent_ppo_dict.keys()}
         agent_dones_dict = {agent: None for agent in self.agent_ppo_dict.keys()}
         agent_values_dict = {agent: None for agent in self.agent_ppo_dict.keys()}
         agent_log_probs_dict = {agent: None for agent in self.agent_ppo_dict.keys()}
         agent_new_obs_dict = {agent: None for agent in self.agent_ppo_dict.keys()}
 
-        while n_steps < n_rollout_steps:
+        # only end loop when all replay buffers are filled
+        while not all(complete_collection_dict.values()):
             for agent, ppo in self.agent_ppo_dict.items():
                 if (
                     ppo.use_sde
@@ -146,28 +151,16 @@ class Heterogenous_PPO(object):
                 ):
                     ppo.policy.reset_noise(self.agent_env_dict[agent].num_envs)
 
-                with th.no_grad():
-                    # Convert to pytorch tensor
-                    obs_tensor = th.as_tensor(ppo._last_obs).to(ppo.device)
-                    (
-                        actions,
-                        agent_values_dict[agent],
-                        agent_log_probs_dict[agent],
-                    ) = ppo.policy.forward(obs_tensor)
-
-                agent_actions_dict[agent] = actions.cpu().numpy()
-                # Rescale and perform action
-                clipped_actions = agent_actions_dict[agent]
-                # Clip the actions to avoid out of bound error
-                if isinstance(ppo.action_space, gym.spaces.Box):
-                    clipped_actions = np.clip(
-                        agent_actions_dict[agent],
-                        ppo.action_space.low,
-                        ppo.action_space.high,
-                    )
+                actions = Heterogenous_PPO.infer_action(
+                    agent,
+                    ppo,
+                    agent_actions_dict,
+                    agent_values_dict,
+                    agent_log_probs_dict,
+                )
 
                 # Env step for all robots
-                self.agent_env_dict[agent].step(clipped_actions)
+                self.agent_env_dict[agent].step(actions)
 
             for i in range(1, self.n_envs + 1):
                 call_service_takeSimStep(ns=self.ns_prefix + str(i))
@@ -178,38 +171,41 @@ class Heterogenous_PPO(object):
                     rewards,
                     agent_dones_dict[agent],
                     infos,
-                ) = self.agent_env_dict[agent].step(clipped_actions)
+                ) = self.agent_env_dict[agent].step(actions)
 
-                # TODO: Training with different number of robots (num_envs)
-                ppo.num_timesteps += self.agent_env_dict[agent].num_envs
+                # only continue memorizing experiences if buffer is not full
+                if not complete_collection_dict[agent]:
+                    ppo.num_timesteps += self.agent_env_dict[agent].num_envs
+                    ppo._update_info_buffer(infos)
 
-                # TODO: CALLBACK
-                # Give access to local variables
-                # callback.update_locals(locals())
-                # if callback.on_step() is False:
-                #     return False
+                    if isinstance(ppo.action_space, gym.spaces.Discrete):
+                        # Reshape in case of discrete action
+                        actions = actions.reshape(-1, 1)
 
-                ppo._update_info_buffer(infos)
+                    rollout_buffers[agent].add(
+                        ppo._last_obs,
+                        agent_actions_dict[agent],
+                        rewards,
+                        ppo._last_dones,
+                        agent_values_dict[agent],
+                        agent_log_probs_dict[agent],
+                    )
 
-                if isinstance(ppo.action_space, gym.spaces.Discrete):
-                    # Reshape in case of discrete action
-                    actions = actions.reshape(-1, 1)
-
-                rollout_buffers[agent].add(
-                    ppo._last_obs,
-                    agent_actions_dict[agent],
-                    rewards,
-                    ppo._last_dones,
-                    agent_values_dict[agent],
-                    agent_log_probs_dict[agent],
-                )
                 ppo._last_obs = agent_new_obs_dict[agent]
                 ppo._last_dones = agent_dones_dict[agent]
 
             if Heterogenous_PPO.check_for_reset(agent_dones_dict):
                 self.reset_all_envs()
 
+            # TODO: CALLBACK
+            # Give access to local variables
+            # callback.update_locals(locals())
+            # if callback.on_step() is False:
+            #     return False
+
             n_steps += 1
+
+            self.check_for_complete_collection(complete_collection_dict, n_steps)
 
         for agent, ppo in self.agent_ppo_dict.items():
             with th.no_grad():
@@ -225,7 +221,7 @@ class Heterogenous_PPO(object):
         # TODO: CALLBACK
         # callback.on_rollout_end()
 
-        return True
+        return True, n_steps
 
     def train(self):
         for agent, ppo in self.agent_ppo_dict.items():
@@ -258,16 +254,19 @@ class Heterogenous_PPO(object):
         )
 
         # callback.on_training_start(locals(), globals())
+        max_n_robots = max([envs.num_envs for envs in self.agent_env_dict.values()])
 
         while self.num_timesteps < total_timesteps:
 
-            continue_training = self.collect_rollouts(
+            continue_training, n_steps = self.collect_rollouts(
                 callback,
                 n_rollout_steps=self.agent_ppo_dict["jackal"].n_steps,
             )
 
             if continue_training is False:
                 break
+
+            self.num_timesteps = n_steps * max_n_robots
 
             iteration += 1
             # self._update_current_progress_remaining(self.num_timesteps, total_timesteps)
@@ -306,8 +305,44 @@ class Heterogenous_PPO(object):
         raise NotImplementedError()
 
     @staticmethod
+    def infer_action(
+        agent: str,
+        ppo: PPO,
+        agent_actions_dict: dict,
+        agent_values_dict: dict,
+        agent_log_probs_dict: dict,
+    ) -> np.ndarray:
+        with th.no_grad():
+            # Convert to pytorch tensor
+            obs_tensor = th.as_tensor(ppo._last_obs).to(ppo.device)
+            (
+                actions,
+                agent_values_dict[agent],
+                agent_log_probs_dict[agent],
+            ) = ppo.policy.forward(obs_tensor)
+
+        agent_actions_dict[agent] = actions.cpu().numpy()
+        # Rescale and perform action
+        clipped_actions = agent_actions_dict[agent]
+        # Clip the actions to avoid out of bound error
+        if isinstance(ppo.action_space, gym.spaces.Box):
+            clipped_actions = np.clip(
+                agent_actions_dict[agent],
+                ppo.action_space.low,
+                ppo.action_space.high,
+            )
+        return clipped_actions
+
+    @staticmethod
     def check_for_reset(dones_dict: dict) -> bool:
         return all(list(map(lambda x: np.all(x == 1), dones_dict.values())))
+
+    def check_for_complete_collection(
+        self, completion_dict: dict, curr_steps_count: int
+    ) -> bool:
+        for agent, ppo in self.agent_ppo_dict.items():
+            if ppo.n_steps <= curr_steps_count:
+                completion_dict[agent] = True
 
     def reset_all_envs(self) -> None:
         for agent, env in self.agent_env_dict.items():

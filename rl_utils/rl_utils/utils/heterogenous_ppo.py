@@ -1,9 +1,11 @@
+import os
 import time
 from collections import deque
 from typing import Dict, Optional, Tuple
 
 import gym
 import numpy as np
+import rospy
 import torch as th
 from rl_utils.rl_utils.envs.pettingzoo_env import FlatlandPettingZooEnv
 from rl_utils.rl_utils.utils.utils import call_service_takeSimStep
@@ -21,10 +23,15 @@ class Heterogenous_PPO(object):
         agent_ppo_dict: Dict[str, PPO],
         agent_env_dict: Dict[str, SB3VecEnvWrapper],
         n_envs: int,
+        model_save_path_dict: Dict[str, str] = None,
         verbose: bool = True,
     ) -> None:
         self.agent_ppo_dict = agent_ppo_dict
         self.agent_env_dict = agent_env_dict
+
+        self.model_save_path_dict = model_save_path_dict or {
+            agent: None for agent in agent_ppo_dict
+        }
 
         self.n_envs, self.ns_prefix = n_envs, "sim_"
         self.num_timesteps = 0
@@ -125,11 +132,14 @@ class Heterogenous_PPO(object):
             agent: ppo.rollout_buffer for agent, ppo in self.agent_ppo_dict.items()
         }
 
+        Heterogenous_PPO._reset_all_rollout_buffers(rollout_buffers)
+
         for agent, ppo in self.agent_ppo_dict.items():
             if ppo.use_sde:
                 ppo.policy.reset_noise(self.agent_env_dict[agent].num_envs)
 
-        callback.on_rollout_start()
+        if callback:
+            callback.on_rollout_start()
 
         complete_collection_dict = {
             agent: False for agent in self.agent_ppo_dict.keys()
@@ -195,9 +205,10 @@ class Heterogenous_PPO(object):
                 ppo._last_dones = agent_dones_dict[agent]
 
             # Give access to local variables
-            callback.update_locals(locals())
-            if callback.on_step() is False:
-                return False
+            if callback:
+                callback.update_locals(locals())
+                if callback.on_step() is False:
+                    return False
 
             if Heterogenous_PPO.check_for_reset(agent_dones_dict):
                 self.reset_all_envs()
@@ -217,7 +228,8 @@ class Heterogenous_PPO(object):
                 last_values=agent_values_dict[agent], dones=agent_dones_dict[agent]
             )
 
-        callback.on_rollout_end()
+        if callback:
+            callback.on_rollout_end()
 
         return True, n_steps
 
@@ -251,7 +263,8 @@ class Heterogenous_PPO(object):
             tb_log_name,
         )
 
-        callback.on_training_start(locals(), globals())
+        if callback:
+            callback.on_training_start(locals(), globals())
 
         avg_n_robots = np.mean([envs.num_envs for envs in self.agent_env_dict.values()])
 
@@ -295,7 +308,10 @@ class Heterogenous_PPO(object):
 
             self.train()
 
-        callback.on_training_end()
+        self.save_models()
+
+        if callback:
+            callback.on_training_end()
 
         return self
 
@@ -338,9 +354,18 @@ class Heterogenous_PPO(object):
     def check_for_complete_collection(
         self, completion_dict: dict, curr_steps_count: int
     ) -> bool:
+        # in hyperparameter file: n_steps = n_envs / batch_size
+        # RolloutBuffer size = n_steps * (n_envs * n_robots)
         for agent, ppo in self.agent_ppo_dict.items():
             if ppo.n_steps <= curr_steps_count:
                 completion_dict[agent] = True
+
+    @staticmethod
+    def _reset_all_rollout_buffers(
+        rollout_buffer_dict: Dict[str, RolloutBuffer]
+    ) -> None:
+        for buffer in rollout_buffer_dict.values():
+            buffer.reset()
 
     def reset_all_envs(self) -> None:
         for agent, env in self.agent_env_dict.items():
@@ -361,3 +386,11 @@ class Heterogenous_PPO(object):
         self._current_progress_remaining = 1.0 - float(num_timesteps) / float(
             total_timesteps
         )
+
+    def save_models(self) -> None:
+        if not rospy.get_param("debug_mode", False):
+            for agent, ppo in self.agent_ppo_dict.items():
+                if self.model_save_path_dict[agent]:
+                    ppo.save(
+                        os.path.join(self.model_save_path_dict[agent], "best_model")
+                    )

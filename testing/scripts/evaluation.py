@@ -2,6 +2,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import copy
+import rospy
 
 from rl_utils.rl_utils.utils.utils import call_service_takeSimStep
 
@@ -28,18 +29,18 @@ def evaluate_policy(
         results as well. You can avoid this by wrapping environment with ``Monitor``
         wrapper before anything else.
     """
-    # is_monitor_wrapped = False
-    # Avoid circular import
-    # from stable_baselines3.common.env_util import is_wrapped
-    # from stable_baselines3.common.monitor import Monitor
-
     obs = {robot: {} for robot in robots}
 
     not_reseted = True
     # Avoid double reset, as VecEnv are reset automatically.
     if not_reseted:
+        # Reset the env states for all robots
+        for robot in robots:
+            rospy.set_param(f"eval_sim/training/{robot}/reset_mode", "reset_states")
+            robots[robot]["env"].reset()
         # perform one step in the simulation to update the scene
         call_service_takeSimStep(ns="eval_sim")
+        # Collect new observations after reset for all robots
         for robot in robots:
             # ('robot': {'agent1': obs, 'agent2': obs, ...})
             obs[robot] = robots[robot]["env"].reset()
@@ -80,10 +81,15 @@ def evaluate_policy(
 
         # Avoid double reset, as VecEnv are reset automatically.
         if not_reseted:
+            # Reset the env states for all robots
+            for robot in robots:
+                rospy.set_param(f"eval_sim/training/{robot}/reset_mode", "reset_states")
+                robots[robot]["env"].reset()
             # perform one step in the simulation to update the scene
             call_service_takeSimStep(ns="eval_sim")
+            # Collect new observations after reset for all robots
             for robot in robots:
-                # ('robot': array[[obs1], [obs2], ...])
+                # ('robot': {'agent1': obs, 'agent2': obs, ...})
                 obs[robot] = robots[robot]["env"].reset()
                 not_reseted = False
 
@@ -116,8 +122,10 @@ def evaluate_policy(
             for robot in robots:
                 obs[robot], rewards, dones[robot], _ = robots[robot]["env"].get_states()
                 # Add up rewards for this episode
-                for agent, reward in zip(agent_names[robot], rewards.values()):
-                    episode_reward[robot][agent] += reward
+                for (agent, reward) in rewards.items():
+                    # Only add reward if agent is not done
+                    if agent in dones[robot].keys() and not dones[robot][agent]:
+                        episode_reward[robot][agent] += reward
 
                 if callback is not None:
                     callback(locals(), globals())
@@ -182,3 +190,13 @@ def check_dones(dones):
             else:
                 return False
     return True
+
+
+def print_evaluation_results(mean_rewards, std_rewards):
+    for robot in mean_rewards:
+        print(f"{robot}:")
+        for agent in mean_rewards[robot]:
+            print(
+                f"\t{agent}: {mean_rewards[robot][agent]} +- {std_rewards[robot][agent]}"
+            )
+    print("")

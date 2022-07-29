@@ -14,6 +14,8 @@ from rl_utils.rl_utils.utils.heterogenous_ppo import Heterogenous_PPO
 # from rl_utils.rl_utils.utils.supersuit_utils import vec_env_create
 from rl_utils.rl_utils.utils.utils import instantiate_train_drl_agents
 
+from testing.scripts.evaluation import create_eval_callback
+
 # from rosnav.model.agent_factory import AgentFactory
 # from rosnav.model.base_agent import BaseAgent
 # from rosnav.model.custom_policy import *
@@ -58,6 +60,9 @@ def main(args):
     # and instances of the respective models and envs
     robots = create_training_setup(config)
 
+    ### Create eval callback where also the trained models will be saved
+    callback = create_eval_callback(config)
+
     # set num of timesteps to be generated
     n_timesteps = 40000000 if config["n_timesteps"] is None else config["n_timesteps"]
 
@@ -83,7 +88,7 @@ def main(args):
     agent_env_dict = {agent: robots[agent]["env"] for agent in robot_names}
 
     het_ppo = Heterogenous_PPO(agent_ppo_dict, agent_env_dict, config["n_envs"])
-    het_ppo.learn(total_timesteps=n_timesteps)
+    het_ppo.learn(total_timesteps=n_timesteps, callback=callback)
 
     # except KeyboardInterrupt:
     #     print("KeyboardInterrupt..")

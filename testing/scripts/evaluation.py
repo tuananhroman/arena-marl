@@ -5,6 +5,13 @@ import copy
 import rospy
 
 from rl_utils.rl_utils.utils.utils import call_service_takeSimStep
+from training.tools.train_agent_utils import create_deployment_setup
+
+from stable_baselines3.common.callbacks import (
+    MarlEvalCallback,
+    StopTrainingOnRewardThreshold,
+)
+from training.tools.staged_train_callback import InitiateNewTrainStage
 
 
 def evaluate_policy(
@@ -179,6 +186,34 @@ def evaluate_policy(
     if return_episode_rewards:
         return episode_rewards, episode_lengths
     return mean_rewards, std_rewards
+
+
+def create_eval_callback(config):
+    robots = create_deployment_setup(config)
+
+    return MarlEvalCallback(
+        robots=robots,
+        n_eval_episodes=config["periodic_eval"]["n_eval_episodes"],
+        eval_freq=config["periodic_eval"]["eval_freq"],
+        deterministic=True,
+        log_path={robot: val["paths"]["eval"] for robot, val in robots.items()},
+        best_model_save_path={
+            robot: val["paths"]["model"] for robot, val in robots.items()
+        },
+        callback_on_eval_end=InitiateNewTrainStage(
+            n_envs=config["n_envs"],
+            treshhold_type=config["training_curriculum"]["threshold_type"],
+            upper_threshold=config["training_curriculum"]["upper_threshold"],
+            lower_threshold=config["training_curriculum"]["lower_threshold"],
+            task_mode=config["training_curriculum"],
+            verbose=1,
+        ),
+        callback_on_new_best=StopTrainingOnRewardThreshold(
+            treshhold_type=config["stop_training"]["threshold_type"],
+            threshold=config["stop_training"]["threshold"],
+            verbose=1,
+        ),
+    )
 
 
 def check_dones(dones):

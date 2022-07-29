@@ -10,6 +10,7 @@ from rl_utils.rl_utils.utils.utils import call_service_takeSimStep
 from stable_baselines3.common import logger
 from stable_baselines3.common.buffers import RolloutBuffer
 from stable_baselines3.common.callbacks import BaseCallback
+from stable_baselines3.common.utils import safe_mean
 from stable_baselines3.ppo.ppo import PPO
 from supersuit.vector.sb3_vector_wrapper import SB3VecEnvWrapper
 
@@ -101,7 +102,6 @@ class Heterogenous_PPO(object):
     def collect_rollouts(
         self,
         callback: BaseCallback,
-        n_rollout_steps: int,
     ) -> bool:
         """
         Collect experiences using the current policy and fill a ``RolloutBuffer``.
@@ -129,8 +129,8 @@ class Heterogenous_PPO(object):
             if ppo.use_sde:
                 ppo.policy.reset_noise(self.agent_env_dict[agent].num_envs)
 
-        # TODO: CALLBACK
-        # callback.on_rollout_start()
+        callback.on_rollout_start()
+
         complete_collection_dict = {
             agent: False for agent in self.agent_ppo_dict.keys()
         }
@@ -194,14 +194,13 @@ class Heterogenous_PPO(object):
                 ppo._last_obs = agent_new_obs_dict[agent]
                 ppo._last_dones = agent_dones_dict[agent]
 
+            # Give access to local variables
+            callback.update_locals(locals())
+            if callback.on_step() is False:
+                return False
+
             if Heterogenous_PPO.check_for_reset(agent_dones_dict):
                 self.reset_all_envs()
-
-            # TODO: CALLBACK
-            # Give access to local variables
-            # callback.update_locals(locals())
-            # if callback.on_step() is False:
-            #     return False
 
             n_steps += 1
 
@@ -218,8 +217,7 @@ class Heterogenous_PPO(object):
                 last_values=agent_values_dict[agent], dones=agent_dones_dict[agent]
             )
 
-        # TODO: CALLBACK
-        # callback.on_rollout_end()
+        callback.on_rollout_end()
 
         return True, n_steps
 
@@ -253,23 +251,23 @@ class Heterogenous_PPO(object):
             tb_log_name,
         )
 
-        # callback.on_training_start(locals(), globals())
-        max_n_robots = max([envs.num_envs for envs in self.agent_env_dict.values()])
+        callback.on_training_start(locals(), globals())
+
+        avg_n_robots = np.mean([envs.num_envs for envs in self.agent_env_dict.values()])
 
         while self.num_timesteps < total_timesteps:
 
-            continue_training, n_steps = self.collect_rollouts(
-                callback,
-                n_rollout_steps=self.agent_ppo_dict["jackal"].n_steps,
-            )
+            continue_training, n_steps = self.collect_rollouts(callback)
 
             if continue_training is False:
                 break
 
-            self.num_timesteps = n_steps * max_n_robots
+            self.num_timesteps = n_steps * avg_n_robots
 
             iteration += 1
-            # self._update_current_progress_remaining(self.num_timesteps, total_timesteps)
+
+            # TODO: LOGGING
+            self._update_current_progress_remaining(self.num_timesteps, total_timesteps)
 
             # Display training infos
             # if log_interval is not None and iteration % log_interval == 0:
@@ -297,7 +295,7 @@ class Heterogenous_PPO(object):
 
             self.train()
 
-        # callback.on_training_end()
+        callback.on_training_end()
 
         return self
 
@@ -350,3 +348,16 @@ class Heterogenous_PPO(object):
             env.reset()
             # retrieve new simulation state
             self.agent_ppo_dict[agent]._last_obs = env.reset()
+
+    def _update_current_progress_remaining(
+        self, num_timesteps: int, total_timesteps: int
+    ) -> None:
+        """
+        Compute current progress remaining (starts from 1 and ends to 0)
+
+        :param num_timesteps: current number of timesteps
+        :param total_timesteps:
+        """
+        self._current_progress_remaining = 1.0 - float(num_timesteps) / float(
+            total_timesteps
+        )

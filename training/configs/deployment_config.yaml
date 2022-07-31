@@ -33,13 +33,6 @@ evaluation_curriculum:
   upper_threshold: 0.8
   lower_threshold: 0.6
 
-### stop training on threshold
-# stops training when last stage reached and threshold satisfied
-# stop_training:
-#   threshold_type: "succ"
-#   threshold: 0.9
-
-
 # save evaluation stats during training in log file
 eval_log: false
 # use tensorboard

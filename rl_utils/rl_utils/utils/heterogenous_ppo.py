@@ -279,7 +279,7 @@ class Heterogenous_PPO(object):
 
             iteration += 1
 
-            # TODO: LOGGING
+            # TODO: WandB LOGGING
             self._update_current_progress_remaining(self.num_timesteps, total_timesteps)
 
             # Display training infos

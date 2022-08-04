@@ -38,8 +38,8 @@ def main(args):
     robots = create_training_setup(config)
 
     ### Create eval callback where also the trained models will be saved
-    # callback = create_eval_callback(config)
-    callback = None
+    callback = create_eval_callback(config, robots)
+    # callback = None
 
     ### set num of timesteps to be generated
     n_timesteps = 40000000 if config["n_timesteps"] is None else config["n_timesteps"]

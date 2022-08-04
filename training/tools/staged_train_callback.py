@@ -107,35 +107,61 @@ class InitiateNewTrainStage(BaseCallback):
                     % EvalObject.n_eval_episodes
                 )
 
-            if (
-                self.threshhold_type == "rew"
-                and EvalObject.best_mean_reward <= self.lower_threshold
-            ) or (
-                self.threshhold_type == "succ"
-                and EvalObject.last_success_rate <= self.lower_threshold
-            ):
+            if self._check_lower_threshold(EvalObject):
                 for i, pub in enumerate(self._publishers_previous):
                     pub.publish(self._trigger)
                     if i == 0:
                         self.log_curr_stage(EvalObject.logger)
 
-            if (
-                self.threshhold_type == "rew"
-                and EvalObject.best_mean_reward >= self.upper_threshold
-            ) or (
-                self.threshhold_type == "succ"
-                and EvalObject.last_success_rate >= self.upper_threshold
-            ):
+            if self._check_upper_threshold(EvalObject):
                 if not rospy.get_param("/last_stage_reached"):
-                    EvalObject.best_mean_reward = -np.inf
-                    EvalObject.last_success_rate = -np.inf
+                    EvalObject.best_mean_rewards = {
+                        robot: -np.inf for robot in EvalObject.robots
+                    }
+                    EvalObject.last_success_rates = {
+                        robot: -np.inf for robot in EvalObject.robots
+                    }
 
-                for i, pub in enumerate(self._publishers_next):
-                    pub.publish(self._trigger)
-                    if i == 0:
-                        self.log_curr_stage(EvalObject.logger)
+    def _check_lower_threshold(self, EvalObject: EvalCallback) -> bool:
+        ### if all values (all robots) are smaller than lower threshold return true
+        if (
+            self.threshhold_type == "rew"
+            and all(
+                np.asarray([rew for rew in EvalObject.best_mean_rewards.values()])
+                <= self.lower_threshold
+            )
+        ) or (
+            self.threshhold_type == "succ"
+            and all(
+                np.asarray([sr for sr in EvalObject.last_success_rates.values()])
+                <= self.lower_threshold
+            )
+        ):
+            return True
+        else:
+            return False
+
+    def _check_upper_threshold(self, EvalObject: EvalCallback) -> bool:
+        ### if all values (all robots) are higher than lower threshold return true
+        if (
+            self.threshhold_type == "rew"
+            and all(
+                np.asarray([rew for rew in EvalObject.best_mean_rewards.values()])
+                >= self.upper_threshold
+            )
+        ) or (
+            self.threshhold_type == "succ"
+            and all(
+                np.asarray([sr for sr in EvalObject.last_success_rates.values()])
+                >= self.upper_threshold
+            )
+        ):
+            return True
+        else:
+            return False
 
     def log_curr_stage(self, logger):
         time.sleep(1)
         curr_stage = rospy.get_param("/curr_stage", -1)
-        logger.record("train_stage/stage_idx", curr_stage)
+        if logger is not None:
+            logger.record("train_stage/stage_idx", curr_stage)

@@ -5,7 +5,7 @@ import copy
 import rospy
 
 from rl_utils.rl_utils.utils.utils import call_service_takeSimStep
-from training.tools.train_agent_utils import create_deployment_setup
+from training.tools.train_agent_utils import create_evaluation_setup
 
 from stable_baselines3.common.callbacks import (
     MarlEvalCallback,
@@ -76,6 +76,7 @@ def evaluate_policy(
     # dones -> {'robot': {'robot_ns': False}}
     # e.g. {'jackal': {robot1: False, robot2: False}, 'burger': {'robot1': False}}
     default_dones = {robot: {a: False for a in agent_names[robot]} for robot in robots}
+    default_infos = {robot: {a: 0 for a in agent_names[robot]} for robot in robots}
     default_actions = {robot: {a: [] for a in agent_names[robot]} for robot in robots}
     # states, actions, episode rewards -> {'robot': {'robot_ns': None}}
     # e.g. {'jackal': {robot1: None, robot2: None}, 'burger': {'robot1': None}}
@@ -101,6 +102,7 @@ def evaluate_policy(
                 not_reseted = False
 
         dones = copy.deepcopy(default_dones)
+        infos = copy.deepcopy(default_infos)
         actions = copy.deepcopy(default_actions)
         episode_reward = copy.deepcopy(default_episode_reward)
         episode_length = 0
@@ -127,18 +129,34 @@ def evaluate_policy(
 
             ### Get new obs, rewards, dones, and infos for all robots
             for robot in robots:
-                obs[robot], rewards, dones[robot], _ = robots[robot]["env"].get_states()
+                obs[robot], rewards, dones[robot], infos[robot] = robots[robot][
+                    "env"
+                ].get_states()
                 # Add up rewards for this episode
                 for (agent, reward) in rewards.items():
                     # Only add reward if agent is not done
                     if agent in dones[robot].keys() and not dones[robot][agent]:
                         episode_reward[robot][agent] += reward
 
-                if callback is not None:
-                    callback(locals(), globals())
-
                 if render:
                     robots[robot]["env"].render()
+
+            # TODO: Logic for success rate
+            done_count = {}
+            success_count = {}
+            for robot in robots:
+                done_count[robot] = np.sum(
+                    [1 for is_done in dones[robot].values() if is_done]
+                )
+                success_count[robot] = np.sum(
+                    [
+                        infos[robot][agent]["is_success"]
+                        for agent in infos[robot]
+                        if "is_success" in infos[robot][agent].values()
+                    ]
+                )
+            if callback is not None:
+                callback(locals(), globals())
 
             ### Document how long this episode was
             episode_length += 1
@@ -188,24 +206,24 @@ def evaluate_policy(
     return mean_rewards, std_rewards
 
 
-def create_eval_callback(config):
-    robots = create_deployment_setup(config)
+def create_eval_callback(config, train_robots):
+    robots = create_evaluation_setup(config, train_robots)
 
     return MarlEvalCallback(
         robots=robots,
         n_eval_episodes=config["periodic_eval"]["n_eval_episodes"],
         eval_freq=config["periodic_eval"]["eval_freq"],
         deterministic=True,
-        log_path={robot: val["paths"]["eval"] for robot, val in robots.items()},
-        best_model_save_path={
-            robot: val["paths"]["model"] for robot, val in robots.items()
+        log_paths={robot: val["paths"]["eval"] for robot, val in train_robots.items()},
+        best_model_save_paths={
+            robot: val["paths"]["model"] for robot, val in train_robots.items()
         },
         callback_on_eval_end=InitiateNewTrainStage(
             n_envs=config["n_envs"],
             treshhold_type=config["training_curriculum"]["threshold_type"],
             upper_threshold=config["training_curriculum"]["upper_threshold"],
             lower_threshold=config["training_curriculum"]["lower_threshold"],
-            task_mode=config["training_curriculum"],
+            task_mode=config["task_mode"],
             verbose=1,
         ),
         callback_on_new_best=StopTrainingOnRewardThreshold(

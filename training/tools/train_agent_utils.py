@@ -20,7 +20,6 @@ import yaml
 from rl_utils.rl_utils.envs.pettingzoo_env import FlatlandPettingZooEnv, env_fn
 from rl_utils.rl_utils.utils.supersuit_utils import vec_env_create
 from rl_utils.rl_utils.utils.utils import instantiate_train_drl_agents
-from rosnav.model.agent_factory import AgentFactory
 from rosnav.model.base_agent import BaseAgent
 from stable_baselines3 import PPO
 
@@ -346,6 +345,99 @@ def create_deployment_setup(config: dict) -> dict:
     return robots
 
 
+def create_evaluation_setup(config: dict, train_robots: dict) -> dict:
+    """Create deployment setup from config file
+
+    Args:
+        config (dict): Config file containing deployment setup
+
+    Returns:
+        dict[dict[string, Any]]: Returns dict for all robot types (names) containing \
+            all necessary parameters, paths, and instances of the deployment setup \
+                
+            robots[robot_name] = {
+                "model": model,
+                "env": env,
+                "n_envs": config["n_envs"],
+                "agent_dict": agent_dict,
+                "robot_train_params": robot_train_params,
+                "hyper_params": hyper_params,
+                "paths": paths,
+            }
+    """
+
+    ### existing_robots is used to generate new namespaces for each agent of each robot
+    # e.g. 'jackal' -> 'robot1', 'robot2'
+    #      'burger' -> 'robot3', 'robot4'
+    robots, existing_robots = {}, 0
+
+    ### create task manager
+    task_manager = get_task_manager(
+        ns="eval_sim",
+        mode=config["task_mode"],
+        curriculum_path=config["evaluation_curriculum"]["evaluation_curriculum_file"],
+    )
+
+    ### create and set obstacle manager
+    obstacle_manager = init_obstacle_manager(n_envs=config["n_envs"], mode="eval")
+    task_manager.set_obstacle_manager(obstacle_manager)
+
+    ### create seperate model instances for each robot
+    for robot_name, robot_train_params in config["robots"].items():
+        hyperparams_path = train_robots[robot_name]["paths"]["hyperparams"]
+
+        ### create agent wrapper dict for specific robot
+        # each entry contains list of agents for specfic namespace
+        # e.g. agent_list["eval_sim"] -> [TrainingDRLAgent]
+        # needs to be a dict to work with init_robot_manager
+        agent_dict = {
+            "eval_sim": instantiate_train_drl_agents(
+                num_robots=robot_train_params["num_robots"],
+                existing_robots=existing_robots,
+                robot_model=robot_name,
+                hyperparameter_path=hyperparams_path,
+                ns="eval_sim",
+            )
+        }
+
+        ### create a list of Robot Managers for each agent, respectively
+        # {"eval_sim": [RobotManager]}
+        robot_manager_dict = init_robot_managers(
+            n_envs=config["n_envs"],
+            robot_type=robot_name,
+            agent_dict=agent_dict,
+            mode="eval",
+        )
+
+        ### add all robot/ agent managers for current robot type to task manager
+        task_manager.add_robot_manager(
+            robot_type=robot_name, managers=robot_manager_dict["eval_sim"]
+        )
+
+        ### create PettingZoo environment
+        env = FlatlandPettingZooEnv(
+            agent_list=agent_dict["eval_sim"],
+            ns="eval_sim",
+            task_manager_reset=task_manager.reset,
+            max_num_moves_per_eps=config["periodic_eval"]["max_num_moves_per_eps"],
+        )
+
+        existing_robots += robot_train_params["num_robots"]
+
+        ### load currently trained model
+        model = train_robots[robot_name]["model"]
+
+        ### add configuration for one robot to robots dictionary
+        robots[robot_name] = {
+            "model": model,
+            "env": env,
+            "agent_dict": agent_dict,
+            "robot_train_params": robot_train_params,
+        }
+
+    return robots
+
+
 def initialize_hyperparameters(PATHS: dict, config: dict, n_envs: int) -> dict:
     """
     Write hyperparameters to json file in case agent is new otherwise load existing hyperparameters
@@ -461,9 +553,7 @@ def check_hyperparam_format(loaded_hyperparams: dict, PATHS: dict) -> None:
         raise TypeError("Parameter 'task_mode' has unknown value")
 
 
-def update_hyperparam_model(
-    model: PPO, PATHS: dict, params: dict, n_envs: int = 1
-) -> None:
+def update_hyperparam_model(model, PATHS: dict, params: dict, n_envs: int = 1) -> None:
     """
     Updates parameter of loaded PPO agent when it was manually changed in the configs yaml.
 
@@ -763,6 +853,10 @@ def load_vec_normalize(params: dict, PATHS: dict, env: VecEnv, eval_env: VecEnv)
 
 
 def choose_agent_model(robot_name, PATHS, config, env, params, n_envs):
+    # avoid circular import
+    from rosnav.model.agent_factory import AgentFactory
+    from stable_baselines3 import PPO
+
     if config["resume"] is None:
         agent: Union[
             Type[BaseAgent], Type[ActorCriticPolicy]

@@ -9,7 +9,8 @@ import rospy
 import torch as th
 from rl_utils.rl_utils.envs.pettingzoo_env import FlatlandPettingZooEnv
 from rl_utils.rl_utils.utils.utils import call_service_takeSimStep
-from stable_baselines3.common import logger
+
+# from stable_baselines3.common import logger
 from stable_baselines3.common.buffers import RolloutBuffer
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.utils import safe_mean
@@ -99,10 +100,8 @@ class Heterogenous_PPO(object):
             #     self.verbose, self.tensorboard_log, tb_log_name, reset_num_timesteps
             # )
 
-            # Create eval callback if needed
-            # callback = self._init_callback(
-            #     callback, eval_env, eval_freq, n_eval_episodes, log_path
-            # )
+        # Create directories for best models and logs
+        self._init_callback(callback)
 
         return total_timesteps, None
 
@@ -207,6 +206,7 @@ class Heterogenous_PPO(object):
             # Give access to local variables
             if callback:
                 callback.update_locals(locals())
+                # Stop training if all model performances (mean rewards) are higher than threshold
                 if callback.on_step() is False:
                     return False
 
@@ -228,8 +228,10 @@ class Heterogenous_PPO(object):
                 last_values=agent_values_dict[agent], dones=agent_dones_dict[agent]
             )
 
+        ### Eval and save
+        #   Perform evaluation phase and save best model for each robot, if it has improved
         if callback:
-            callback.on_rollout_end()
+            return callback.on_rollout_end(), n_steps
 
         return True, n_steps
 
@@ -252,7 +254,7 @@ class Heterogenous_PPO(object):
     ) -> "OnPolicyAlgorithm":
         iteration = 0
 
-        total_timesteps, callback = self._setup_learn(
+        total_timesteps, _ = self._setup_learn(
             total_timesteps,
             eval_env,
             callback,
@@ -263,8 +265,8 @@ class Heterogenous_PPO(object):
             tb_log_name,
         )
 
-        if callback:
-            callback.on_training_start(locals(), globals())
+        # if callback:
+        # callback.on_training_start(locals(), globals())
 
         avg_n_robots = np.mean([envs.num_envs for envs in self.agent_env_dict.values()])
 
@@ -316,7 +318,7 @@ class Heterogenous_PPO(object):
         return self
 
     def _init_callback(self, callback):
-        raise NotImplementedError()
+        callback._init_callback()
 
     @staticmethod
     def infer_action(

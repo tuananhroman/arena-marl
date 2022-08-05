@@ -8,6 +8,7 @@ from datetime import datetime as dt
 from multiprocessing import cpu_count
 from typing import Type, Union
 
+
 # import gym
 import rosnode
 import rospkg
@@ -20,6 +21,7 @@ import yaml
 from rl_utils.rl_utils.envs.pettingzoo_env import FlatlandPettingZooEnv, env_fn
 from rl_utils.rl_utils.utils.supersuit_utils import vec_env_create
 from rl_utils.rl_utils.utils.utils import instantiate_train_drl_agents
+import rl_utils.rl_utils.utils.wandb_helper as wandb_helper
 from rosnav.model.base_agent import BaseAgent
 from stable_baselines3 import PPO
 
@@ -104,7 +106,7 @@ def load_config(config_name: str) -> dict:
     return config
 
 
-def create_training_setup(config: dict) -> dict:
+def create_training_setup(config: dict, wandb_logger) -> dict:
     """Create training setup from config file
 
     Args:
@@ -161,6 +163,12 @@ def create_training_setup(config: dict) -> dict:
             config=robot_train_params,
             n_envs=config["n_envs"],
         )
+
+        ### wandb logging
+        if wandb_logger is not None:
+            wandb_logger.update_hyperparameters(
+                hyper_params, robot_train_params, robot_name
+            )
 
         ### create agent wrapper dict for specific robot
         # custom policy relies on ros parameter for model to get the correct model parameters.

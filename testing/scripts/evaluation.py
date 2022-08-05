@@ -206,11 +206,12 @@ def evaluate_policy(
     return mean_rewards, std_rewards
 
 
-def create_eval_callback(config, train_robots):
+def create_eval_callback(config, train_robots, wandb_logger):
     robots = create_evaluation_setup(config, train_robots)
 
     return MarlEvalCallback(
         robots=robots,
+        wandb_logger=wandb_logger,
         n_eval_episodes=config["periodic_eval"]["n_eval_episodes"],
         eval_freq=config["periodic_eval"]["eval_freq"],
         deterministic=True,

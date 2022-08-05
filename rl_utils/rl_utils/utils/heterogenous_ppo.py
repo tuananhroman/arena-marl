@@ -9,6 +9,8 @@ import rospy
 import torch as th
 from rl_utils.rl_utils.envs.pettingzoo_env import FlatlandPettingZooEnv
 from rl_utils.rl_utils.utils.utils import call_service_takeSimStep
+from rl_utils.rl_utils.utils.wandb_helper import WandbLogger
+from stable_baselines3.common import utils
 
 # from stable_baselines3.common import logger
 from stable_baselines3.common.buffers import RolloutBuffer
@@ -24,6 +26,7 @@ class Heterogenous_PPO(object):
         agent_ppo_dict: Dict[str, PPO],
         agent_env_dict: Dict[str, SB3VecEnvWrapper],
         n_envs: int,
+        wandb_logger: WandbLogger,
         model_save_path_dict: Dict[str, str] = None,
         verbose: bool = True,
     ) -> None:
@@ -34,8 +37,11 @@ class Heterogenous_PPO(object):
             agent: None for agent in agent_ppo_dict
         }
 
+        self.wandb_logger = wandb_logger
+
         self.n_envs, self.ns_prefix = n_envs, "sim_"
         self.num_timesteps = 0
+        self.verbose = verbose
 
     def _setup_learn(
         self,
@@ -285,28 +291,32 @@ class Heterogenous_PPO(object):
             self._update_current_progress_remaining(self.num_timesteps, total_timesteps)
 
             # Display training infos
-            # if log_interval is not None and iteration % log_interval == 0:
-            #     fps = int(self.num_timesteps / (time.time() - self.start_time))
-            #     logger.record("time/iterations", iteration, exclude="tensorboard")
-            #     if len(self.ep_info_buffer) > 0 and len(self.ep_info_buffer[0]) > 0:
-            #         logger.record(
-            #             "rollout/ep_rew_mean",
-            #             safe_mean([ep_info["r"] for ep_info in self.ep_info_buffer]),
-            #         )
-            #         logger.record(
-            #             "rollout/ep_len_mean",
-            #             safe_mean([ep_info["l"] for ep_info in self.ep_info_buffer]),
-            #         )
-            #     logger.record("time/fps", fps)
-            #     logger.record(
-            #         "time/time_elapsed",
-            #         int(time.time() - self.start_time),
-            #         exclude="tensorboard",
-            #     )
-            #     logger.record(
-            #         "time/total_timesteps", self.num_timesteps, exclude="tensorboard"
-            #     )
-            #     logger.dump(step=self.num_timesteps)
+            if log_interval is not None and iteration % log_interval == 0:
+                fps = int(self.num_timesteps / (time.time() - self.start_time))
+                self.wandb_logger.log_single("fps", fps, step=iteration)
+                self.wandb_logger.log_single(
+                    "total_timesteps", self.num_timesteps, step=iteration
+                )
+                # logger.record("time/iterations", iteration, exclude="tensorboard")
+                # if len(self.ep_info_buffer) > 0 and len(self.ep_info_buffer[0]) > 0:
+                #     logger.record(
+                #         "rollout/ep_rew_mean",
+                #         safe_mean([ep_info["r"] for ep_info in self.ep_info_buffer]),
+                #     )
+                #     logger.record(
+                #         "rollout/ep_len_mean",
+                #         safe_mean([ep_info["l"] for ep_info in self.ep_info_buffer]),
+                #     )
+                # logger.record("time/fps", fps)
+                # logger.record(
+                #     "time/time_elapsed",
+                #     int(time.time() - self.start_time),
+                #     exclude="tensorboard",
+                # )
+                # logger.record(
+                #     "time/total_timesteps", self.num_timesteps, exclude="tensorboard"
+                # )
+                # logger.dump(step=self.num_timesteps)
 
             self.train()
 

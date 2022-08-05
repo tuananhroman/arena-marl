@@ -5,6 +5,8 @@ from datetime import time
 from multiprocessing import set_start_method
 
 import rospy
+from rl_utils.rl_utils.utils.wandb_helper import WandbLogger
+
 
 from rl_utils.rl_utils.utils.heterogenous_ppo import Heterogenous_PPO
 
@@ -29,17 +31,20 @@ def main(args):
     ### load configuration
     config = load_config(args.config)
     robot_names = list(config["robots"].keys())
+    if config["wandb"]:
+        wandb_logger = WandbLogger("arena-marl")
+    else:
+        wandb_logger = None
 
     # set debug_mode
     rospy.set_param("debug_mode", config["debug_mode"])
 
     ### create dict for all robot types
     # those contain all necessary parameters, and instances of the respective models and envs
-    robots = create_training_setup(config)
+    robots = create_training_setup(config, wandb_logger)
 
     ### Create eval callback where also the trained models will be saved
-    callback = create_eval_callback(config, robots)
-    # callback = None
+    callback = create_eval_callback(config, robots, wandb_logger=wandb_logger)
 
     ### set num of timesteps to be generated
     n_timesteps = 40000000 if config["n_timesteps"] is None else config["n_timesteps"]
@@ -47,11 +52,17 @@ def main(args):
     agent_ppo_dict = {agent: robots[agent]["model"] for agent in robot_names}
     agent_env_dict = {agent: robots[agent]["env"] for agent in robot_names}
 
-    het_ppo = Heterogenous_PPO(agent_ppo_dict, agent_env_dict, config["n_envs"])
+    het_ppo = Heterogenous_PPO(
+        agent_ppo_dict, agent_env_dict, config["n_envs"], wandb_logger
+    )
 
     start = time.time()
     try:
-        het_ppo.learn(total_timesteps=n_timesteps, callback=callback)
+        het_ppo.learn(
+            total_timesteps=n_timesteps,
+            callback=callback,
+            log_interval=config["log_interval"],
+        )
     except KeyboardInterrupt:
         print("KeyboardInterrupt..")
 

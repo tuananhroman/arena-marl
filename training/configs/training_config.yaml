@@ -50,10 +50,15 @@ stop_training:
   threshold: 0.9
 
 
+### logging
+# log interval
+log_interval: 2
 # save evaluation stats during training in log file
 eval_log: false
 # use tensorboard
 tb: false
+# use wandb
+wandb: true
 
 robots:
   jackal:

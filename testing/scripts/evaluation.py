@@ -1,17 +1,15 @@
+import copy
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
-import copy
 import rospy
-
 from rl_utils.rl_utils.utils.utils import call_service_takeSimStep
-from training.tools.train_agent_utils import create_evaluation_setup
-
 from stable_baselines3.common.callbacks import (
     MarlEvalCallback,
     StopTrainingOnRewardThreshold,
 )
 from training.tools.staged_train_callback import InitiateNewTrainStage
+from training.tools.train_agent_utils import create_evaluation_setup
 
 
 def evaluate_policy(

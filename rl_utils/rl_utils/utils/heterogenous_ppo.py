@@ -11,7 +11,6 @@ from rl_utils.rl_utils.envs.pettingzoo_env import FlatlandPettingZooEnv
 from rl_utils.rl_utils.utils.utils import call_service_takeSimStep
 from rl_utils.rl_utils.utils.wandb_helper import WandbLogger
 from stable_baselines3.common import utils
-
 # from stable_baselines3.common import logger
 from stable_baselines3.common.buffers import RolloutBuffer
 from stable_baselines3.common.callbacks import BaseCallback
@@ -189,7 +188,12 @@ class Heterogenous_PPO(object):
                 ) = self.agent_env_dict[agent].step(actions)
 
                 # only continue memorizing experiences if buffer is not full
-                if not complete_collection_dict[agent]:
+                # and if at least one robot is still alive
+                if not complete_collection_dict[
+                    agent
+                ] and not Heterogenous_PPO.check_robot_model_done(
+                    agent_dones_dict[agent]
+                ):
                     ppo.num_timesteps += self.agent_env_dict[agent].num_envs
                     ppo._update_info_buffer(infos)
 
@@ -362,6 +366,10 @@ class Heterogenous_PPO(object):
     @staticmethod
     def check_for_reset(dones_dict: dict) -> bool:
         return all(list(map(lambda x: np.all(x == 1), dones_dict.values())))
+
+    @staticmethod
+    def check_robot_model_done(dones_array: np.ndarray) -> bool:
+        return all(list(map(lambda x: np.all(x == 1), dones_array)))
 
     def check_for_complete_collection(
         self, completion_dict: dict, curr_steps_count: int

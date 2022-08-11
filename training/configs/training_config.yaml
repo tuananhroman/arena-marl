@@ -52,7 +52,7 @@ stop_training:
 
 ### logging
 # log interval
-log_interval: 2
+log_interval: 1
 # save evaluation stats during training in log file
 eval_log: false
 # use tensorboard
@@ -70,15 +70,15 @@ robots:
     architecture_name: "AGENT_24"
     # path to latest checkpoint; if provided the training will be resumed from that checkpoint
     resume: null
-  rto:
-    # number of robots of this type
-    num_robots: 3
-    # name of hyperparameter file located in the configs/hyperparameters directory
-    hyperparameter_file: "rto.json"
-    # name of architecture defined in the Policy factory
-    architecture_name: "AGENT_24"
-    # path to latest checkpoint; if provided the training will be resumed from that checkpoint
-    resume: null
+  # rto:
+  #   # number of robots of this type
+  #   num_robots: 3
+  #   # name of hyperparameter file located in the configs/hyperparameters directory
+  #   hyperparameter_file: "rto.json"
+  #   # name of architecture defined in the Policy factory
+  #   architecture_name: "AGENT_24"
+  #   # path to latest checkpoint; if provided the training will be resumed from that checkpoint
+  #   resume: null
   ridgeback:
     # number of robots of this type
     num_robots: 3

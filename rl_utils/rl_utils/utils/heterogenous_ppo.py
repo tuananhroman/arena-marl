@@ -221,7 +221,7 @@ class Heterogenous_PPO(object):
                 if callback.on_step() is False:
                     return False
 
-            if Heterogenous_PPO.check_for_reset(agent_dones_dict):
+            if Heterogenous_PPO.check_for_reset(agent_dones_dict, rollout_buffers):
                 self.reset_all_envs()
 
             n_steps += 1
@@ -297,11 +297,19 @@ class Heterogenous_PPO(object):
 
             # Display training infos
             if log_interval is not None and iteration % log_interval == 0:
-                fps = int(self.num_timesteps / (time.time() - self.start_time))
+                duration = time.time() - self.start_time
+                fps = int(self.num_timesteps / duration)
                 self.wandb_logger.log_single("fps", fps, step=iteration)
                 self.wandb_logger.log_single(
                     "total_timesteps", self.num_timesteps, step=iteration
                 )
+                print("---------------------------------------")
+                print(
+                    "Iteration: {}\tTimesteps: {}\tFPS: {}".format(
+                        iteration, self.num_timesteps, fps
+                    )
+                )
+                print("---------------------------------------")
                 # logger.record("time/iterations", iteration, exclude="tensorboard")
                 # if len(self.ep_info_buffer) > 0 and len(self.ep_info_buffer[0]) > 0:
                 #     logger.record(
@@ -365,8 +373,24 @@ class Heterogenous_PPO(object):
         return clipped_actions
 
     @staticmethod
-    def check_for_reset(dones_dict: dict) -> bool:
-        return all(list(map(lambda x: np.all(x == 1), dones_dict.values())))
+    def check_for_reset(
+        dones_dict: dict, rollout_buffer_dict: Dict[str, RolloutBuffer]
+    ) -> bool:
+        """Check for each robot type if either the agents are done or the buffer is full. If one is true for each robot type prepare for reset.
+
+        Args:
+            dones_dict (dict): dictionary with all done values.
+            rollout_buffer_dict (Dict[str, RolloutBuffer]): dictionary with the respective rolloutbuffers.
+
+        Returns:
+            bool: _description_
+        """
+        buffers_full = [
+            rollout_buffer.full for rollout_buffer in rollout_buffer_dict.values()
+        ]
+        dones = list(map(lambda x: np.all(x == 1), dones_dict.values()))
+        check = buffers_full or dones
+        return all(check)
 
     @staticmethod
     def check_robot_model_done(dones_array: np.ndarray) -> bool:
@@ -378,7 +402,8 @@ class Heterogenous_PPO(object):
         # in hyperparameter file: n_steps = n_envs / batch_size
         # RolloutBuffer size = n_steps * (n_envs * n_robots)
         for agent, ppo in self.agent_ppo_dict.items():
-            if ppo.n_steps <= curr_steps_count:
+            # if ppo.n_steps <= curr_steps_count:
+            if ppo.rollout_buffer.full and not completion_dict[agent]:
                 completion_dict[agent] = True
 
     @staticmethod

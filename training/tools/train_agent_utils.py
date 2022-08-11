@@ -8,6 +8,7 @@ from datetime import datetime as dt
 from multiprocessing import cpu_count
 from typing import Type, Union
 
+import rl_utils.rl_utils.utils.wandb_helper as wandb_helper
 
 # import gym
 import rosnode
@@ -21,7 +22,6 @@ import yaml
 from rl_utils.rl_utils.envs.pettingzoo_env import FlatlandPettingZooEnv, env_fn
 from rl_utils.rl_utils.utils.supersuit_utils import vec_env_create
 from rl_utils.rl_utils.utils.utils import instantiate_train_drl_agents
-import rl_utils.rl_utils.utils.wandb_helper as wandb_helper
 from rosnav.model.base_agent import BaseAgent
 from stable_baselines3 import PPO
 
@@ -223,6 +223,7 @@ def create_training_setup(config: dict, wandb_logger) -> dict:
             "hyper_params": hyper_params,
             "paths": paths,
         }
+        time.sleep(0.5)
 
     return robots
 

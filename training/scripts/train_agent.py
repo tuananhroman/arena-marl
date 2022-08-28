@@ -1,5 +1,4 @@
 import sys
-
 # import time
 from datetime import time
 from multiprocessing import set_start_method
@@ -12,20 +11,16 @@ from training.tools.argsparser import parse_training_args
 from training.tools.custom_mlp_utils import *
 from training.tools.train_agent_utils import *
 from training.tools.train_agent_utils import (
-    choose_agent_model,
-    create_training_setup,
-    get_MARL_agent_name_and_start_time,
-    get_paths,
-    initialize_hyperparameters,
-    load_config,
-)
+    choose_agent_model, create_training_setup,
+    get_MARL_agent_name_and_start_time, get_paths, initialize_hyperparameters,
+    load_config)
 
 
 def main(args):
     ### load configuration
     config = load_config(args.config)
     robot_names = list(config["robots"].keys())
-    if config["wandb"]:
+    if config["wandb"] and not config["debug_mode"]:
         wandb_logger = WandbLogger("arena-marl")
     else:
         wandb_logger = None
@@ -45,9 +40,10 @@ def main(args):
 
     agent_ppo_dict = {agent: robots[agent]["model"] for agent in robot_names}
     agent_env_dict = {agent: robots[agent]["env"] for agent in robot_names}
+    agent_param_dict = {agent: robots[agent]["hyper_params"] for agent in robot_names}
 
     het_ppo = Heterogenous_PPO(
-        agent_ppo_dict, agent_env_dict, config["n_envs"], wandb_logger
+        agent_ppo_dict, agent_env_dict, agent_param_dict, config["n_envs"], wandb_logger
     )
 
     start = time.time()

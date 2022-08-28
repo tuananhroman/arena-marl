@@ -1,7 +1,7 @@
 import os
 import time
 from collections import deque
-from typing import Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import gym
 import numpy as np
@@ -25,6 +25,7 @@ class Heterogenous_PPO(object):
         self,
         agent_ppo_dict: Dict[str, PPO],
         agent_env_dict: Dict[str, SB3VecEnvWrapper],
+        agent_param_dict: Dict[str, Dict[str, Any]],
         n_envs: int,
         wandb_logger: WandbLogger,
         model_save_path_dict: Dict[str, str] = None,
@@ -32,6 +33,7 @@ class Heterogenous_PPO(object):
     ) -> None:
         self.agent_ppo_dict = agent_ppo_dict
         self.agent_env_dict = agent_env_dict
+        self.agent_param_dict = agent_param_dict
 
         self.model_save_path_dict = model_save_path_dict or {
             agent: None for agent in agent_ppo_dict
@@ -74,10 +76,11 @@ class Heterogenous_PPO(object):
             # ppo.device = "cpu"
             # ppo.policy.cpu()
 
+            ppo.n_envs = self.agent_env_dict[agent].num_envs
+            ppo.n_steps = self.agent_param_dict[agent]["batch_size"] // ppo.n_envs
             # reinitialize the rollout buffer when ppo was loaded and does not
             # have the appropriate shape
-            if ppo.rollout_buffer.n_envs != self.agent_env_dict[agent].num_envs:
-                self._update_rollout_buffer(agent, ppo)
+            self._update_rollout_buffer(agent, ppo)
 
             if ppo.ep_info_buffer is None or reset_num_timesteps:
                 ppo.ep_info_buffer = deque(maxlen=100)
@@ -324,7 +327,7 @@ class Heterogenous_PPO(object):
             if continue_training is False:
                 break
 
-            self.num_timesteps = n_steps * avg_n_robots
+            self.num_timesteps += n_steps * avg_n_robots
 
             iteration += 1
 
@@ -486,8 +489,6 @@ class Heterogenous_PPO(object):
                     )
 
     def _update_rollout_buffer(self, agent: str, ppo: PPO) -> None:
-        ppo.n_envs = self.agent_env_dict[agent].num_envs
-        ppo.n_steps = ppo.batch_size // ppo.n_envs
         ppo.rollout_buffer = RolloutBuffer(
             ppo.n_steps,
             ppo.observation_space,

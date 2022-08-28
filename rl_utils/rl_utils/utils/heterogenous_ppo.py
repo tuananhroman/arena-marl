@@ -69,9 +69,15 @@ class Heterogenous_PPO(object):
         """
         self.start_time = time.time()
 
-        for _, ppo in self.agent_ppo_dict.items():
+        ### First reset all environment states
+        for agent, ppo in self.agent_ppo_dict.items():
             # ppo.device = "cpu"
             # ppo.policy.cpu()
+
+            # reinitialize the rollout buffer when ppo was loaded and does not
+            # have the appropriate shape
+            if ppo.rollout_buffer.n_envs != self.agent_env_dict[agent].num_envs:
+                self._update_rollout_buffer(agent, ppo)
 
             if ppo.ep_info_buffer is None or reset_num_timesteps:
                 ppo.ep_info_buffer = deque(maxlen=100)
@@ -91,20 +97,29 @@ class Heterogenous_PPO(object):
 
             # Avoid resetting the environment when calling ``.learn()`` consecutive times
             if reset_num_timesteps or ppo._last_obs is None:
+                ### reset states
                 ppo.env.reset()
-                ppo._last_obs = ppo.env.reset()
-                ppo._last_dones = np.zeros((ppo.env.num_envs,), dtype=bool)
-                # Retrieve unnormalized observation for saving into the buffer
-                if ppo._vec_normalize_env is not None:
-                    ppo._last_original_obs = ppo._vec_normalize_env.get_original_obs()
 
-            if eval_env is not None and ppo.seed is not None:
-                eval_env.seed(ppo.seed)
+        ### perform one step in each simulation to update the scene
+        for i in range(1, self.n_envs + 1):
+            call_service_takeSimStep(ns=self.ns_prefix + str(i))
 
-            # Configure logger's outputs
-            # utils.configure_logger(
-            #     self.verbose, self.tensorboard_log, tb_log_name, reset_num_timesteps
-            # )
+        ### Now reset all environments to get respective last observations
+        for _, ppo in self.agent_ppo_dict.items():
+            ### get new observations
+            ppo._last_obs = ppo.env.reset()
+            ppo._last_dones = np.zeros((ppo.env.num_envs,), dtype=bool)
+            # Retrieve unnormalized observation for saving into the buffer
+            if ppo._vec_normalize_env is not None:
+                ppo._last_original_obs = ppo._vec_normalize_env.get_original_obs()
+
+        if eval_env is not None and ppo.seed is not None:
+            eval_env.seed(ppo.seed)
+
+        # Configure logger's outputs
+        # utils.configure_logger(
+        #     self.verbose, self.tensorboard_log, tb_log_name, reset_num_timesteps
+        # )
 
         # Create directories for best models and logs
         self._init_callback(callback)
@@ -186,7 +201,18 @@ class Heterogenous_PPO(object):
                     rewards,
                     agent_dones_dict[agent],
                     infos,
-                ) = self.agent_env_dict[agent].step(actions)
+                ) = self.agent_env_dict[agent].step(
+                    actions
+                )  # Apply dummy action
+
+                ### Print size of rollout buffer
+                #   For debugging purposes
+                if n_steps % 100 == 0:
+                    print(
+                        "Size of rollout buffer for agent {}: {}".format(
+                            agent, rollout_buffers[agent].pos
+                        )
+                    )
 
                 # only continue memorizing experiences if buffer is not full
                 # and if at least one robot is still alive
@@ -228,6 +254,15 @@ class Heterogenous_PPO(object):
 
             self.check_for_complete_collection(complete_collection_dict, n_steps)
 
+        ### Print size of rollout buffer
+        #   For debugging purposes - print the last size of the rollout buffer that is skipped before
+        # if n_steps % 100 == 0:
+        #     print(
+        #         "Size of rollout buffer for agent {}: {}".format(
+        #             agent, rollout_buffers[agent].pos
+        #         )
+        #     )
+
         for agent, ppo in self.agent_ppo_dict.items():
             with th.no_grad():
                 # Compute value for the last timestep
@@ -249,7 +284,7 @@ class Heterogenous_PPO(object):
     def train(self):
         for agent, ppo in self.agent_ppo_dict.items():
             print(f"[{agent}] Start Training Procedure")
-            ppo.train()
+            ppo.train(agent)
 
     def learn(
         self,
@@ -283,6 +318,7 @@ class Heterogenous_PPO(object):
 
         while self.num_timesteps < total_timesteps:
 
+            start_time = time.time()
             continue_training, n_steps = self.collect_rollouts(callback)
 
             if continue_training is False:
@@ -297,12 +333,17 @@ class Heterogenous_PPO(object):
 
             # Display training infos
             if log_interval is not None and iteration % log_interval == 0:
-                duration = time.time() - self.start_time
+                duration = time.time() - start_time
                 fps = int(self.num_timesteps / duration)
-                self.wandb_logger.log_single("fps", fps, step=iteration)
-                self.wandb_logger.log_single(
-                    "total_timesteps", self.num_timesteps, step=iteration
-                )
+                if self.wandb_logger:
+                    self.wandb_logger.log_single(
+                        "time/fps", fps, step=self.num_timesteps
+                    )
+                    self.wandb_logger.log_single(
+                        "time/total_timesteps",
+                        self.num_timesteps,
+                        step=self.num_timesteps,
+                    )
                 print("---------------------------------------")
                 print(
                     "Iteration: {}\tTimesteps: {}\tFPS: {}".format(
@@ -389,7 +430,7 @@ class Heterogenous_PPO(object):
             rollout_buffer.full for rollout_buffer in rollout_buffer_dict.values()
         ]
         dones = list(map(lambda x: np.all(x == 1), dones_dict.values()))
-        check = buffers_full or dones
+        check = [_a or _b for _a, _b in zip(buffers_full, dones)]
         return all(check)
 
     @staticmethod
@@ -419,6 +460,9 @@ class Heterogenous_PPO(object):
             env.reset()
             # retrieve new simulation state
             self.agent_ppo_dict[agent]._last_obs = env.reset()
+        # perform one step in each simulation to update the scene
+        for i in range(1, self.n_envs + 1):
+            call_service_takeSimStep(ns=self.ns_prefix + str(i))
 
     def _update_current_progress_remaining(
         self, num_timesteps: int, total_timesteps: int
@@ -440,3 +484,14 @@ class Heterogenous_PPO(object):
                     ppo.save(
                         os.path.join(self.model_save_path_dict[agent], "best_model")
                     )
+
+    def _update_rollout_buffer(self, agent: str, ppo: PPO) -> None:
+        ppo.rollout_buffer = RolloutBuffer(
+            ppo.n_steps,
+            ppo.observation_space,
+            ppo.action_space,
+            ppo.device,
+            gamma=ppo.gamma,
+            gae_lambda=ppo.gae_lambda,
+            n_envs=self.agent_env_dict[agent].num_envs,
+        )

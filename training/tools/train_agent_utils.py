@@ -210,7 +210,13 @@ def create_training_setup(config: dict, wandb_logger) -> dict:
         existing_robots += robot_train_params["num_robots"]
 
         model = choose_agent_model(
-            robot_name, paths, robot_train_params, env, hyper_params, config["n_envs"]
+            robot_name,
+            paths,
+            robot_train_params,
+            env,
+            hyper_params,
+            config["n_envs"],
+            wandb_logger,
         )
 
         # add configuration for one robot to robots dictionary
@@ -861,7 +867,9 @@ def load_vec_normalize(params: dict, PATHS: dict, env: VecEnv, eval_env: VecEnv)
     return env, eval_env
 
 
-def choose_agent_model(robot_name, PATHS, config, env, params, n_envs):
+def choose_agent_model(
+    robot_name, PATHS, config, env, params, n_envs, wandb_logger=None
+):
     # avoid circular import
     from rosnav.model.agent_factory import AgentFactory
     from stable_baselines3 import PPO
@@ -888,6 +896,7 @@ def choose_agent_model(robot_name, PATHS, config, env, params, n_envs):
                 n_epochs=params["n_epochs"],
                 clip_range=params["clip_range"],
                 tensorboard_log=PATHS.get("tb"),
+                wandb_logger=wandb_logger,
                 verbose=1,
             )
         elif issubclass(agent, ActorCriticPolicy):
@@ -905,6 +914,7 @@ def choose_agent_model(robot_name, PATHS, config, env, params, n_envs):
                 n_epochs=params["n_epochs"],
                 clip_range=params["clip_range"],
                 tensorboard_log=PATHS.get("tb"),
+                wandb_logger=wandb_logger,
                 verbose=1,
             )
         else:
@@ -919,6 +929,10 @@ def choose_agent_model(robot_name, PATHS, config, env, params, n_envs):
         assert os.path.isfile(
             os.path.join(config["resume"], "best_model.zip")
         ), f"Couldn't find best model in {config['resume']}"
+        print(f"Loading model from {config['resume']}")
+        # custom policy relies on ros parameter for model to get the correct model parameters.
+        rospy.set_param("model", robot_name)
         model = PPO.load(os.path.join(config["resume"], "best_model.zip"), env)
+        model.set_wandb_logger(wandb_logger)
         update_hyperparam_model(model, PATHS, params, n_envs)
     return model

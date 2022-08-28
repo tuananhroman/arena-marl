@@ -139,25 +139,25 @@ def evaluate_policy(
                 if render:
                     robots[robot]["env"].render()
 
-            # TODO: Logic for success rate
-            done_count = {}
-            success_count = {}
-            for robot in robots:
-                done_count[robot] = np.sum(
-                    [1 for is_done in dones[robot].values() if is_done]
-                )
-                success_count[robot] = np.sum(
-                    [
-                        infos[robot][agent]["is_success"]
-                        for agent in infos[robot]
-                        if "is_success" in infos[robot][agent].values()
-                    ]
-                )
-            if callback is not None:
-                callback(locals(), globals())
-
             ### Document how long this episode was
             episode_length += 1
+
+        # TODO: check if this is correct
+        done_count = {}
+        success_count = {}
+        for robot in robots:
+            done_count[robot] = np.sum(
+                [1 for is_done in dones[robot].values() if is_done]
+            )
+            success_count[robot] = np.sum(
+                [
+                    infos[robot][agent]["is_success"]
+                    for agent in infos[robot]
+                    if [key for key in infos[robot][agent]].count("is_success")
+                ]
+            )
+        if callback is not None:
+            callback(locals(), globals())
 
         ### Collect all episode rewards
         # For each robot append rewards for every of its agents
@@ -228,6 +228,7 @@ def create_eval_callback(config, train_robots, wandb_logger):
         callback_on_new_best=StopTrainingOnRewardThreshold(
             treshhold_type=config["stop_training"]["threshold_type"],
             threshold=config["stop_training"]["threshold"],
+            robots=robots,
             verbose=1,
         ),
     )

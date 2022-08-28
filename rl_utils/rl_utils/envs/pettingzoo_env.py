@@ -179,7 +179,12 @@ class FlatlandPettingZooEnv(ParallelEnv):
                 f"{self._ns}training/{self.robot_model}/reset_mode", "get_obs"
             )
 
-            return {agent: np.empty(5) for agent in self.agents}
+            fake_obss = {
+                agent: np.zeros(train_agent.observation_space.shape)
+                for agent, train_agent in zip(self.agents, self.agent_list)
+            }
+
+            return fake_obss
         elif mode == "get_obs":
             # get first observations for the next episode
             observations = {
@@ -242,10 +247,13 @@ class FlatlandPettingZooEnv(ParallelEnv):
             dones = {agent: False for agent in self.agents}
             rewards = {agent: 0 for agent in self.agents}
             infos = {agent: 0 for agent in self.agents}
-            obss = {agent: np.empty(5) for agent in self.agents}
+            obss = {
+                agent: np.zeros(train_agent.observation_space.shape)
+                for agent, train_agent in zip(self.agents, self.agent_list)
+            }
 
             # After returning, we will manually take a step in the simulation
-            # prepare next step to reurt the states
+            # prepare next step to return the states
             rospy.set_param(
                 f"{self._ns}training/{self.robot_model}/step_mode", "get_states"
             )

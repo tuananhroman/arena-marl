@@ -243,7 +243,7 @@ class BaseDRLAgent(ABC):
                             angular_range[1],
                         ]
                     ),
-                    dtype=np.float,
+                    dtype=float,
                 )
 
     def setup_reward_calculator(self) -> None:

@@ -577,8 +577,8 @@ def update_hyperparam_model(model, PATHS: dict, params: dict, n_envs: int = 1) -
     :param params: dictionary containing loaded hyperparams
     :param n_envs: number of parallel environments
     """
-    if model.batch_size != params["batch_size"]:
-        model.batch_size = params["batch_size"]
+    if model.batch_size != params["m_batch_size"]:
+        model.batch_size = params["m_batch_size"]
     if model.gamma != params["gamma"]:
         model.gamma = params["gamma"]
     if model.n_steps != params["n_steps"]:

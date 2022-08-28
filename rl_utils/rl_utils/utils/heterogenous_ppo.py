@@ -486,6 +486,8 @@ class Heterogenous_PPO(object):
                     )
 
     def _update_rollout_buffer(self, agent: str, ppo: PPO) -> None:
+        ppo.n_envs = self.agent_env_dict[agent].num_envs
+        ppo.n_steps = ppo.batch_size // ppo.n_envs
         ppo.rollout_buffer = RolloutBuffer(
             ppo.n_steps,
             ppo.observation_space,

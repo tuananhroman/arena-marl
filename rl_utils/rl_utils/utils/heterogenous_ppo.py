@@ -337,7 +337,7 @@ class Heterogenous_PPO(object):
             # Display training infos
             if log_interval is not None and iteration % log_interval == 0:
                 duration = time.time() - start_time
-                fps = int(self.num_timesteps / duration)
+                fps = int(n_steps * avg_n_robots / duration)
                 if self.wandb_logger:
                     self.wandb_logger.log_single(
                         "time/fps", fps, step=self.num_timesteps

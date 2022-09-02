@@ -229,7 +229,6 @@ def create_training_setup(config: dict, wandb_logger) -> dict:
             "hyper_params": hyper_params,
             "paths": paths,
         }
-        time.sleep(0.5)
 
     return robots
 
@@ -933,6 +932,6 @@ def choose_agent_model(
         # custom policy relies on ros parameter for model to get the correct model parameters.
         rospy.set_param("model", robot_name)
         model = PPO.load(os.path.join(config["resume"], "best_model.zip"), env)
-        model.set_wandb_logger(wandb_logger)
         update_hyperparam_model(model, PATHS, params, n_envs)
+    model.set_wandb_logger(wandb_logger)
     return model

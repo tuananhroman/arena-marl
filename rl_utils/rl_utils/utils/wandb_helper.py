@@ -27,6 +27,15 @@ class WandbLogger:
         }
         wandb.log(formatted_dict, step=int(step))  # , commit=True)
 
+    def log_batch(self, dict_to_log: dict, step: int):
+        """Create log entry for ``title``.
+
+        Args:
+            dict_to_log (dict): the dictionary that is to be logged. \
+            step (int): the step of updating the respective metric
+        """
+        wandb.log(dict_to_log, step=int(step))
+
     def log_single(self, title: str, value: int, step: int):
         """Create log entry for ``title``.
 

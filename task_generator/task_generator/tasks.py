@@ -197,9 +197,9 @@ class StagedMARLRandomTask(RandomMARLTask):
 
             if self.ns == "eval_sim":
                 rospy.set_param("/curr_stage", self._curr_stage)
-                if not rospy.get_param("debug_mode"):
-                    with self._lock_json:
-                        self._update_curr_stage_json()
+                # if not rospy.get_param("debug_mode"):
+                #     with self._lock_json:
+                #         self._update_curr_stage_json()
 
                 if self._curr_stage == len(self._stages):
                     rospy.set_param("/last_stage_reached", True)

@@ -1,7 +1,10 @@
+import json
+import os
 import warnings
 import rospy
 import numpy as np
 import time
+from filelock import FileLock
 
 from typing import List
 from std_msgs.msg import Bool
@@ -31,12 +34,41 @@ class InitiateNewTrainStage(BaseCallback):
         upper_threshold: float = 0,
         lower_threshold: float = 0,
         task_mode: str = "staged",
+        model_paths: List[str] = None,
         verbose=0,
     ):
 
         super(InitiateNewTrainStage, self).__init__(verbose=verbose)
         self.n_envs = n_envs
         self.threshhold_type = treshhold_type
+        self.model_paths = model_paths
+
+        # hyperparamters.json location
+        self.json_files = {
+            robot: os.path.join(path, "hyperparameters.json")
+            for robot, path in self.model_paths.items()
+        }
+        if not rospy.get_param("debug_mode"):
+            for _, path in self.json_files.items():
+                assert os.path.isfile(
+                    path
+                ), f"Could not find hyperparameters.json file at {path}"
+
+        self._lock_json = {
+            robot: FileLock(f"{json_file}.lock")
+            for robot, json_file in self.json_files.items()
+        }
+
+        self._trigger = Bool()
+        self._trigger.data = True
+
+        self.activated = False
+        if task_mode == "staged":
+            self.activated = True
+            self._instantiate_publishers()
+
+        self.upper_threshold = upper_threshold
+        self.lower_threshold = lower_threshold
 
         assert self.threshhold_type in {
             "rew",
@@ -114,6 +146,10 @@ class InitiateNewTrainStage(BaseCallback):
                     pub.publish(self._trigger)
                     if i == 0:
                         self.log_curr_stage(EvalObject.logger)
+                        if not rospy.get_param("debug_mode"):
+                            for robot, lock in self._lock_json.items():
+                                with lock:
+                                    self._update_curr_stage_json(robot)
 
             if self._check_upper_threshold(EvalObject):
                 if not rospy.get_param("/last_stage_reached"):
@@ -131,6 +167,10 @@ class InitiateNewTrainStage(BaseCallback):
                         pub.publish(self._trigger)
                         if i == 0:
                             self.log_curr_stage(EvalObject.logger)
+                            if not rospy.get_param("debug_mode"):
+                                for robot, lock in self._lock_json.items():
+                                    with lock:
+                                        self._update_curr_stage_json(robot)
 
     def _check_lower_threshold(self, EvalObject: EvalCallback) -> bool:
         ### if all values (all robots) are smaller than lower threshold return true
@@ -175,5 +215,17 @@ class InitiateNewTrainStage(BaseCallback):
         curr_stage = rospy.get_param("/curr_stage", -1)
         if logger is not None:
             logger.record("train_stage/stage_idx", curr_stage)
-        if self.verbose:
-            print(f"Current training stage: {curr_stage}")
+
+    def _update_curr_stage_json(self, robot):
+        curr_stage = rospy.get_param("/curr_stage", -1)
+        with open(self.json_files[robot], "r") as file:
+            hyperparams = json.load(file)
+        try:
+            hyperparams["curr_stage"] = curr_stage
+        except Exception as e:
+            raise Warning(
+                f" {e} \n Parameter 'curr_stage' not found in 'hyperparameters.json' of {robot}!"
+            )
+        else:
+            with open(self.json_files[robot], "w", encoding="utf-8") as target:
+                json.dump(hyperparams, target, ensure_ascii=False, indent=4)

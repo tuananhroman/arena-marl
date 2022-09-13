@@ -74,7 +74,7 @@ def evaluate_policy(
     # dones -> {'robot': {'robot_ns': False}}
     # e.g. {'jackal': {robot1: False, robot2: False}, 'burger': {'robot1': False}}
     default_dones = {robot: {a: False for a in agent_names[robot]} for robot in robots}
-    default_infos = {robot: {a: 0 for a in agent_names[robot]} for robot in robots}
+    default_infos = {robot: {a: {} for a in agent_names[robot]} for robot in robots}
     default_actions = {robot: {a: [] for a in agent_names[robot]} for robot in robots}
     # states, actions, episode rewards -> {'robot': {'robot_ns': None}}
     # e.g. {'jackal': {robot1: None, robot2: None}, 'burger': {'robot1': None}}
@@ -127,14 +127,28 @@ def evaluate_policy(
 
             ### Get new obs, rewards, dones, and infos for all robots
             for robot in robots:
-                obs[robot], rewards, dones[robot], infos[robot] = robots[robot][
+                obs[robot], rewards, single_dones, single_infos = robots[robot][
                     "env"
                 ].get_states()
+
+                ### Sometimes dones return no entry for an agent
+                #   that was done 1 or more steps before
+                for agent, done in single_dones.items():
+                    dones[robot][agent] = done
+
+                ### Sometimes infos return no entry for an agent
+                #   that was done 1 or more steps before
+                for agent, info in single_infos.items():
+                    for key, value in info.items():
+                        infos[robot][agent][key] = value
+
                 # Add up rewards for this episode
                 for (agent, reward) in rewards.items():
                     # Only add reward if agent is not done
-                    if agent in dones[robot].keys() and not dones[robot][agent]:
-                        episode_reward[robot][agent] += reward
+                    # TODO: Maybe last reward is not added due to if statement
+                    # TODO: Just remove if statement to add all rewards, since all rewards of done agents are 0
+                    # if agent in dones[robot].keys() and not dones[robot][agent]:
+                    episode_reward[robot][agent] += reward
 
                 if render:
                     robots[robot]["env"].render()
@@ -145,6 +159,7 @@ def evaluate_policy(
         # TODO: check if this is correct
         done_count = {}
         success_count = {}
+        done_reason_count = {robot: np.zeros(5) for robot in robots}
         for robot in robots:
             done_count[robot] = np.sum(
                 [1 for is_done in dones[robot].values() if is_done]
@@ -153,9 +168,23 @@ def evaluate_policy(
                 [
                     infos[robot][agent]["is_success"]
                     for agent in infos[robot]
-                    if [key for key in infos[robot][agent]].count("is_success")
+                    if "is_success" in infos[robot][agent]
+                    # if [key for key in infos[robot][agent]].count("is_success")
                 ]
             )
+            ### Count the reasons for termination
+            #   For debugging
+            #   idx 0-2: done reasons count
+            #   idx 3:   normalization count
+            #   idx 4:   no reason count
+            for agent in infos[robot]:
+                if "done_reason" in infos[robot][agent]:
+                    done_reason = infos[robot][agent]["done_reason"]
+                    done_reason_count[robot][done_reason] += 1
+                    done_reason_count[robot][3] += 1
+                else:
+                    done_reason_count[robot][4] += 1
+
         if callback is not None:
             callback(locals(), globals())
 

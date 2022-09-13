@@ -22,7 +22,7 @@ class WandbLogger:
                 ``{robot1: value1, robot2: value2, ...}``
             step (int): the step of updating the respective metric
         """
-        print(f"[For Debugging] Logging {title} at step {step}")
+        print(f"[WandB] Logging {title} at step {step}")
         formatted_dict = {
             f"{title}/{robot}": value for robot, value in dict_to_log.items()
         }
@@ -35,7 +35,7 @@ class WandbLogger:
             dict_to_log (dict): the dictionary that is to be logged. \
             step (int): the step of updating the respective metric
         """
-        print(f"[For Debugging] Logging training batch at step {step}")
+        print(f"[WandB] Logging training batch at step {step}")
         wandb.log(dict_to_log, step=int(step))
 
     def log_single(self, title: str, value: int, step: int):
@@ -47,4 +47,5 @@ class WandbLogger:
             step (int): the step of updating the respective metric
         """
         # wandb.log({title: value}, step=int(step), commit=True)
+        print(f"[WandB] Logging {title} at step {step}")
         wandb.log({title: value}, step=int(step))  # , commit=True)

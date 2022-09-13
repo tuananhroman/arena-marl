@@ -1,9 +1,9 @@
+from typing import Tuple
+
 import numpy as np
 import scipy.spatial
-
-from numpy.lib.utils import safe_eval
 from geometry_msgs.msg import Pose2D
-from typing import Tuple
+from numpy.lib.utils import safe_eval
 
 
 class RewardCalculator:
@@ -46,6 +46,7 @@ class RewardCalculator:
             "rule_03": RewardCalculator._cal_reward_rule_03,
             "rule_04": RewardCalculator._cal_reward_rule_04,
             "rule_05": RewardCalculator._cal_reward_rule_05,
+            "rule_06": RewardCalculator._cal_reward_rule_06,
             "barn": RewardCalculator._cal_reward_rule_barn,
         }
         self.cal_func = self._cal_funcs[rule]
@@ -201,10 +202,10 @@ class RewardCalculator:
                 reward_factor=0.2,
                 penalty_factor=0.3,
             )
-            self._reward_abrupt_vel_change(vel_idx=0, factor=1.0)
-            self._reward_abrupt_vel_change(vel_idx=-1, factor=0.5)
+            self._reward_abrupt_vel_change(vel_idx=0, factor=0.2)
+            self._reward_abrupt_vel_change(vel_idx=-1, factor=0.05)
             if self.holonomic:
-                self._reward_abrupt_vel_change(vel_idx=1, factor=0.5)
+                self._reward_abrupt_vel_change(vel_idx=1, factor=0.05)
             self._reward_reverse_drive(self._curr_action, 0.0001)
         else:
             self.last_dist_to_path = None
@@ -213,6 +214,31 @@ class RewardCalculator:
         self._reward_collision(laser_scan, punishment=10)
         self._reward_goal_approached(
             goal_in_robot_frame, reward_factor=0.4, penalty_factor=0.6
+        )
+        self.last_action = self._curr_action
+
+    def _cal_reward_rule_06(
+        self,
+        laser_scan: np.ndarray,
+        goal_in_robot_frame: Tuple[float, float],
+        *args,
+        **kwargs
+    ):
+        self._curr_action = kwargs["action"]
+        # self._reward_following_global_plan(self._curr_action)
+        if laser_scan.min() > self.safe_dist:
+            self._reward_abrupt_vel_change(vel_idx=0, factor=0.05)
+            self._reward_abrupt_vel_change(vel_idx=-1, factor=0.01)
+            if self.holonomic:
+                self._reward_abrupt_vel_change(vel_idx=1, factor=0.01)
+            self._reward_reverse_drive(self._curr_action, 0.00005)
+        else:
+            self.last_dist_to_path = None
+        self._reward_goal_reached(goal_in_robot_frame, reward=17.5)
+        self._reward_safe_dist(laser_scan, punishment=0.2)
+        self._reward_collision(laser_scan, punishment=10)
+        self._reward_goal_approached(
+            goal_in_robot_frame, reward_factor=0.5, penalty_factor=0.6
         )
         self.last_action = self._curr_action
 

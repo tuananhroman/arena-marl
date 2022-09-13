@@ -1,16 +1,14 @@
+import json
+import os
 from abc import ABC, abstractmethod
 from typing import Tuple
 
-import json
 import numpy as np
-import os
-import rospy
 import rospkg
+import rospy
 import yaml
-
-from gym import spaces
-
 from geometry_msgs.msg import Twist
+from gym import spaces
 
 from .utils.observation_collector import ObservationCollector
 from .utils.reward import RewardCalculator
@@ -26,7 +24,7 @@ DEFAULT_HYPERPARAMETER = os.path.join(
     "default.json",
 )
 DEFAULT_NUM_LASER_BEAMS, DEFAULT_LASER_RANGE = 360, 3.5
-GOAL_RADIUS = 0.33
+GOAL_RADIUS = 0.75
 
 
 class BaseDRLAgent(ABC):
@@ -253,7 +251,7 @@ class BaseDRLAgent(ABC):
             holonomic=self._holonomic,
             robot_radius=self._robot_radius,
             safe_dist=1.6 * self._robot_radius,
-            goal_radius=GOAL_RADIUS,
+            goal_radius=self._agent_params["goal_radius"],
             rule=self._agent_params["reward_fnc"],
             extended_eval=False,
         )

@@ -143,12 +143,20 @@ def evaluate_policy(
                         infos[robot][agent][key] = value
 
                 # Add up rewards for this episode
-                for (agent, reward) in rewards.items():
-                    # Only add reward if agent is not done
-                    # TODO: Maybe last reward is not added due to if statement
-                    # TODO: Just remove if statement to add all rewards, since all rewards of done agents are 0
-                    # if agent in dones[robot].keys() and not dones[robot][agent]:
-                    episode_reward[robot][agent] += reward
+                # for (agent, reward) in rewards.items():
+                #     # Only add reward if agent is not done
+                #     # TODO: Maybe last reward is not added due to if statement
+                #     # TODO: Just remove if statement to add all rewards, since all rewards of done agents are 0
+                #     if agent in dones[robot].keys() and not dones[robot][agent]:
+                #         # episode_reward[robot][agent] += reward
+                #         pass
+                #     else:
+                #         print(f"{agent} is done, not adding reward")
+
+                ### Add up rewards for this episode
+                #   Only add reward if agent is not done
+                for agent in single_dones.keys():
+                    episode_reward[robot][agent] += rewards[agent]
 
                 if render:
                     robots[robot]["env"].render()
@@ -252,6 +260,9 @@ def create_eval_callback(config, train_robots, wandb_logger):
             upper_threshold=config["training_curriculum"]["upper_threshold"],
             lower_threshold=config["training_curriculum"]["lower_threshold"],
             task_mode=config["task_mode"],
+            model_paths={
+                robot: val["paths"]["model"] for robot, val in train_robots.items()
+            },
             verbose=1,
         ),
         callback_on_new_best=StopTrainingOnRewardThreshold(

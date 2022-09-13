@@ -108,6 +108,8 @@ class InitiateNewTrainStage(BaseCallback):
                 )
 
             if self._check_lower_threshold(EvalObject):
+                if self.verbose:
+                    print("Dropped below lower threshold, going to previous stage.")
                 for i, pub in enumerate(self._publishers_previous):
                     pub.publish(self._trigger)
                     if i == 0:
@@ -121,6 +123,14 @@ class InitiateNewTrainStage(BaseCallback):
                     EvalObject.last_success_rates = {
                         robot: -np.inf for robot in EvalObject.robots
                     }
+                    if self.verbose:
+                        print(
+                            "Performance above upper threshold! Entering next training stage."
+                        )
+                    for i, pub in enumerate(self._publishers_next):
+                        pub.publish(self._trigger)
+                        if i == 0:
+                            self.log_curr_stage(EvalObject.logger)
 
     def _check_lower_threshold(self, EvalObject: EvalCallback) -> bool:
         ### if all values (all robots) are smaller than lower threshold return true
@@ -142,7 +152,7 @@ class InitiateNewTrainStage(BaseCallback):
             return False
 
     def _check_upper_threshold(self, EvalObject: EvalCallback) -> bool:
-        ### if all values (all robots) are higher than lower threshold return true
+        ### if all values (all robots) are higher than upper threshold return true
         if (
             self.threshhold_type == "rew"
             and all(
@@ -165,3 +175,5 @@ class InitiateNewTrainStage(BaseCallback):
         curr_stage = rospy.get_param("/curr_stage", -1)
         if logger is not None:
             logger.record("train_stage/stage_idx", curr_stage)
+        if self.verbose:
+            print(f"Current training stage: {curr_stage}")

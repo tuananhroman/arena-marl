@@ -210,12 +210,12 @@ class Heterogenous_PPO(object):
 
                 ### Print size of rollout buffer
                 #   For debugging purposes
-                if n_steps % 100 == 0:
-                    print(
-                        "Size of rollout buffer for agent {}: {}".format(
-                            agent, rollout_buffers[agent].pos
-                        )
-                    )
+                # if n_steps % 100 == 0:
+                #     print(
+                #         "Size of rollout buffer for agent {}: {}".format(
+                #             agent, rollout_buffers[agent].pos
+                #         )
+                #     )
 
                 # only continue memorizing experiences if buffer is not full
                 # and if at least one robot is still alive

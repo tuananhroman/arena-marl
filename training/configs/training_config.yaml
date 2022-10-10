@@ -3,7 +3,7 @@ debug_mode: false
 
 # Hardware specifc configurations
 # number of parallel environments
-n_envs: 16
+n_envs: 12
 # gpu yes or no
 no_gpu: no
 
@@ -22,15 +22,15 @@ wandb: true
 task_mode: "staged"
 # number of simulation timesteps
 n_timesteps: 40000000
-max_num_moves_per_eps: 400 # 350
+max_num_moves_per_eps: 2000 # 350
 
 periodic_eval:
   # max number of steps per episode
-  max_num_moves_per_eps: 750 # 1000
+  max_num_moves_per_eps: 2500 # 1000
   # number of evaluation episodes
-  n_eval_episodes: 70 # 100
+  n_eval_episodes: 100 # 100
   # evaluation frequency, evaluation after every n_envs * 20000 timesteps
-  eval_freq: 3000 # 20000
+  eval_freq: 5000 # 20000
 
 ### training_curriculum
 # threshold metric to be considered during evaluation
@@ -39,7 +39,7 @@ training_curriculum:
   # file for the robot's learning curriculum
   training_curriculum_file: "default.yaml"
   threshold_type: "succ"
-  upper_threshold: 0.85
+  upper_threshold: 0.95
   lower_threshold: 0.5
 
 ### evaluation_curriculum
@@ -49,7 +49,7 @@ evaluation_curriculum:
   # file for the robot's learning curriculum
   evaluation_curriculum_file: "default.yaml"
   threshold_type: "succ"
-  upper_threshold: 0.85
+  upper_threshold: 0.95
   lower_threshold: 0.5
 
 ### stop training on threshold
@@ -67,10 +67,9 @@ robots:
     # name of architecture defined in the Policy factory
     architecture_name: "AGENT_24"
     # path to latest checkpoint; if provided the training will be resumed from that checkpoint
-    # resume: null
-    # resume: "/home/linh/marl_ws/src/planners/rosnav/agents/MARL_AGENTS_2022_08_26__15_01/jackal_2022_08_26__15_01"
+    resume: "/home/linh/marl_ws/src/planners/rosnav/agents/MARL_first_training/jackal"
     # resume: "/home/linh/marl_ws/src/planners/rosnav/agents/jackal"
-    resume: null
+    # resume: null
   rto:
     # number of robots of this type
     num_robots: 10
@@ -79,18 +78,19 @@ robots:
     # name of architecture defined in the Policy factory
     architecture_name: "AGENT_24"
     # path to latest checkpoint; if provided the training will be resumed from that checkpoint
-    # resume: null
-    # resume: "/home/linh/marl_ws/src/planners/rosnav/agents/MARL_AGENTS_2022_08_26__15_01/rto_2022_08_26__15_01"
+    # resume: "/home/linh/marl_ws/src/planners/rosnav/agents/MARL_first_training/rto"
+    resume: "/home/linh/marl_ws/src/planners/rosnav/agents/MARL_first_training/rto_tlabs"
     # resume: "/home/linh/marl_ws/src/planners/rosnav/agents/rto_tlabs"
-    resume: null
-  # ridgeback:
-  #   # number of robots of this type
-  #   num_robots: 3
-  #   # name of hyperparameter file located in the configs/hyperparameters directory
-  #   hyperparameter_file: "ridgeback.json" # "default.json"
-  #   # name of architecture defined in the Policy factory
-  #   architecture_name: "AGENT_24"
-  #   # path to latest checkpoint; if provided the training will be resumed from that checkpoint
-  #   resume: null
+    # resume: null
+  ridgeback:
+    # number of robots of this type
+    num_robots: 4
+    # name of hyperparameter file located in the configs/hyperparameters directory
+    hyperparameter_file: "ridgeback.json" # "default.json"
+    # name of architecture defined in the Policy factory
+    architecture_name: "AGENT_24"
+    # path to latest checkpoint; if provided the training will be resumed from that checkpoint
+    resume: "/home/linh/marl_ws/src/planners/rosnav/agents/MARL_first_training/ridgeback"
+    # resume: "/home/linh/marl_ws/src/planners/rosnav/agents/MARL_AGENTS_2022_09_20__15_37/ridgeback_2022_09_20__15_37"
   # add more robots as you wish
   

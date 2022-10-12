@@ -205,7 +205,7 @@ class Heterogenous_PPO(object):
                     agent_dones_dict[agent],
                     infos,
                 ) = self.agent_env_dict[agent].step(
-                    actions
+                    agent_actions_dict[agent]
                 )  # Apply dummy action
 
                 ### Print size of rollout buffer
